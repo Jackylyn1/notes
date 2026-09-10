@@ -1,0 +1,415 @@
+/* Engineering notes — dark reading theme.
+ *
+ * Token values and their jobs come from the corporate design already in use for
+ * the presentations: ACCENT draws structure (rules, borders, arrows), CYAN
+ * carries meaning (the takeaway, the number a section exists for). That split is
+ * structural, not decorative — do not collapse it.
+ *
+ * Every token is declared in the base :root. A colour defined only inside a
+ * media or attribute block is the classic unreadable-page bug.
+ *
+ * No webfonts on purpose: a hash deep-link lands off-target if the fonts arrive
+ * after the jump, and this page is built to be deep-linked into.
+ */
+
+:root {
+  /* surfaces */
+  --bg: #000c18;
+  --surface: #001221;
+  --surface-2: #00182d;
+  --line: #0c2338;
+  --border: #14395e;
+
+  /* text, loudest to quietest */
+  --ink: #f8fafc;
+  --ink-2: #9fb3c8;
+  --ink-3: #6b8199;
+  --faint: #4a5d72;
+
+  /* accents: structure vs meaning */
+  --accent: #0868d0;
+  --cyan: #78c8f8;
+  --violet: #4828a8;
+  --glow: rgba(8, 104, 208, 0.45);
+
+  /* semantics — only ever used to mean something */
+  --good: #22c55e;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+
+  /* type */
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+  /* geometry */
+  --r-panel: 18px;
+  --r-card: 14px;
+  --r-chip: 10px;
+
+  --measure: 74ch;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink-2);
+  font: 400 17px/1.65 var(--sans);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.wrap {
+  width: 100%;
+  max-width: 78rem;
+  margin: 0 auto;
+  padding-inline: 20px;
+}
+
+.skip {
+  position: absolute;
+  left: -9999px;
+}
+.skip:focus {
+  left: 12px;
+  top: 12px;
+  z-index: 10;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: var(--r-chip);
+}
+
+/* ---------- masthead ---------- */
+
+.masthead {
+  border-bottom: 1px solid rgb(12 35 56 / 100%);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
+}
+.masthead .wrap {
+  padding-block: 26px 22px;
+}
+.wordmark {
+  display: inline-block;
+  font: 600 15px/1 var(--mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  text-decoration: none;
+}
+.wordmark:hover { color: var(--ink); }
+.tagline {
+  margin: 10px 0 0;
+  max-width: 60ch;
+  color: var(--ink-3);
+  font-size: 15px;
+}
+
+/* ---------- layout ---------- */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 16rem) minmax(0, 1fr);
+  gap: 44px;
+  align-items: start;
+  padding-block: 40px 72px;
+}
+
+@media (max-width: 62rem) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+}
+
+/* ---------- contents ---------- */
+
+.toc {
+  position: sticky;
+  top: 24px;
+  min-width: 0;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 18px 18px 20px;
+  background: var(--surface);
+  border: 1px solid rgb(20 57 94 / 25%);
+  border-radius: var(--r-panel);
+}
+@media (max-width: 62rem) {
+  .toc {
+    position: static;
+    max-height: 22rem;
+  }
+}
+.toc-head {
+  margin: 0 0 12px;
+  font: 500 10.5px/1 var(--mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.toc ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.toc li { margin: 0 0 2px; }
+.toc a {
+  display: block;
+  padding: 5px 8px;
+  border-radius: 8px;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.4;
+  text-decoration: none;
+}
+.toc a:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.toc > ul > li > a { font-weight: 500; }
+
+/* ---------- prose ---------- */
+
+.prose {
+  min-width: 0;
+  max-width: var(--measure);
+}
+
+.prose > * { min-width: 0; }
+
+.prose h1 {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-size: clamp(30px, 4.4vw, 42px);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  max-width: 28ch;
+}
+
+.prose h2 {
+  margin: 64px 0 14px;
+  padding-top: 22px;
+  border-top: 1px solid rgb(12 35 56 / 100%);
+  color: var(--ink);
+  font-size: clamp(23px, 2.6vw, 28px);
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  font-weight: 650;
+  scroll-margin-top: 20px;
+}
+
+.prose h3 {
+  margin: 38px 0 10px;
+  color: var(--ink);
+  font-size: 19px;
+  line-height: 1.3;
+  font-weight: 600;
+  scroll-margin-top: 20px;
+}
+
+.prose h4 {
+  margin: 26px 0 8px;
+  color: var(--cyan);
+  font: 500 12px/1.3 var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  scroll-margin-top: 20px;
+}
+
+.prose p { margin: 0 0 18px; }
+
+.prose strong { color: var(--ink); font-weight: 600; }
+.prose em { color: var(--ink-2); }
+
+.prose a {
+  color: var(--cyan);
+  text-decoration-color: rgb(120 200 248 / 40%);
+  text-underline-offset: 3px;
+}
+.prose a:hover { color: var(--ink); }
+
+/* permalink beside a heading: present, quiet, never in the way */
+.prose .headerlink {
+  margin-left: 10px;
+  color: var(--faint);
+  font-weight: 400;
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.prose h1:hover .headerlink,
+.prose h2:hover .headerlink,
+.prose h3:hover .headerlink,
+.prose h4:hover .headerlink,
+.prose .headerlink:focus { opacity: 1; }
+
+.prose ul,
+.prose ol {
+  margin: 0 0 18px;
+  padding-left: 22px;
+}
+.prose li { margin: 0 0 7px; }
+.prose li > ul,
+.prose li > ol { margin: 7px 0 0; }
+
+.prose blockquote {
+  margin: 22px 0;
+  padding: 2px 0 2px 20px;
+  border-left: 2px solid var(--accent);
+  color: var(--ink);
+}
+.prose blockquote p:last-child { margin-bottom: 0; }
+
+.prose hr {
+  margin: 44px 0;
+  border: 0;
+  border-top: 1px solid rgb(12 35 56 / 100%);
+}
+
+/* ---------- code ---------- */
+
+.prose code {
+  padding: 1px 5px;
+  background: var(--surface-2);
+  border: 1px solid rgb(20 57 94 / 25%);
+  border-radius: 5px;
+  color: var(--cyan);
+  font: 400 0.86em/1.5 var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.prose pre {
+  margin: 22px 0;
+  padding: 16px 18px;
+  max-width: 100%;
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid rgb(20 57 94 / 25%);
+  border-radius: var(--r-card);
+}
+.prose pre code {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.6;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+/* ---------- tables: their own scroll container, never the page ---------- */
+
+/* Own scroll container, never the page. Cells WRAP: nowrap forces a scrollbar
+ * onto tables that would otherwise fit, and clips readable prose. Only genuinely
+ * wide tables scroll, which is the intent. */
+.prose table {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 24px 0;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+.prose thead th {
+  padding: 9px 14px 9px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink-3);
+  font: 500 10.5px/1.3 var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: left;
+  vertical-align: bottom;
+}
+.prose tbody td {
+  padding: 9px 14px 9px 0;
+  border-bottom: 1px solid rgb(12 35 56 / 100%);
+  vertical-align: top;
+  overflow-wrap: normal;
+}
+.prose tbody tr:last-child td { border-bottom: 0; }
+.prose tbody td:first-child { color: var(--ink); }
+
+/* ---------- footnotes ---------- */
+
+.prose .footnote {
+  margin-top: 56px;
+  padding-top: 22px;
+  border-top: 1px solid rgb(12 35 56 / 100%);
+  color: var(--ink-3);
+  font-size: 15px;
+}
+
+/* ---------- footer ---------- */
+
+.footer {
+  border-top: 1px solid rgb(12 35 56 / 100%);
+  background: var(--surface);
+}
+.footer .wrap { padding-block: 24px 30px; }
+.footer p {
+  margin: 0;
+  max-width: 70ch;
+  color: var(--ink-3);
+  font-size: 14px;
+}
+.footer a { color: var(--cyan); }
+
+/* ---------- focus ---------- */
+
+a:focus-visible,
+.toc a:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ---------- reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+/* ---------- print: keep the theme, do not invert it ----------
+ * An overflow-x:auto element is CLIPPED when printed, not scrolled, so the
+ * scroll containers release their constraints here.
+ */
+
+@page {
+  size: A4;
+  margin: 14mm;
+}
+
+@media print {
+  :root { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  body { background: var(--bg); font-size: 10.5pt; }
+  .masthead { background: none; }
+  .toc,
+  .skip { display: none !important; }
+  .layout {
+    display: block;
+    padding-block: 0;
+  }
+  .prose { max-width: none; }
+  .prose table,
+  .prose pre {
+    overflow-x: visible;
+    white-space: normal;
+    min-width: 0;
+    break-inside: avoid;
+  }
+  .prose pre code { white-space: pre-wrap; }
+  .prose h2,
+  .prose h3,
+  .prose h4 { break-after: avoid; }
+  .prose blockquote,
+  .prose table { break-inside: avoid; }
+  .prose .headerlink { display: none; }
+}
