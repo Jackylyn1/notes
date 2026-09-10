@@ -30,6 +30,9 @@ The projects behind it, described only by shape:
 | E | Interactive technical presentation generation (single-page HTML decks) |
 | F | Quantitative signal/backtesting harnesses |
 | G | A design-study for legal-document search on a cloud platform |
+| H | Distributed signal-ingestion and order-execution system with layered risk gates |
+| I | Long-running community browser game, mid-modernization off a legacy stack |
+| J | Smaller framework builds: auth/import services, an SPA-in-legacy-CMS plugin, an OSS package feature |
 
 ---
 
@@ -735,6 +738,34 @@ about wording:
   ever describe them accurately.
 
 ---
+
+### 4.13 When one computation exists twice, test that the two agree
+
+The research harness and the live path each implement the same derived series — moving
+averages, rolling deviation, the smoothing function, the oscillators. Two
+implementations, because one is compiled for batch throughput and the other consumes a
+stream row by row.
+
+Two test suites were not the answer. The repository has a third: **a dedicated
+equality-test module asserting that the two implementations return the same values on
+the same input** — one equality case per shared function, six of them. A companion
+document tabulates every method in both trees against three columns: *test for the
+research version?*, *test for the live version?*, *equality test?* — so a function with
+two implementations and no equality test is visible as a blank cell rather than as an
+absence nobody notices.
+
+> **Per-side tests prove each implementation matches its author's intent. Only the
+> equality test proves they match each other** — and the failure that costs you money is
+> the divergence, not a bug in either one.
+
+This is the offline/online skew problem stated in the plainest possible way. It applies
+to any system where something is evaluated in batch and then executed in a stream: a
+model scored offline and served online, a report computed nightly and also on demand, a
+permission check in a query and in a template. Two implementations of one rule will drift,
+and nothing in either test suite will notice.
+
+The cheap version, if you have no equality test: make the batch path and the live path
+call the *same* function, and accept the performance cost until it is proven to matter.
 
 ## 5 — Search, coverage and the classes of error nothing downstream can catch
 
@@ -2268,7 +2299,663 @@ Stating the reason is what makes it a decision rather than a gap.
 
 ---
 
-## 15 — Working method: the parts that turned out to matter
+## 15 — Reliability on an ingestion path you do not own
+
+### 15.1 Two delivery mechanisms, one identity key
+
+An ingestion service read messages from ~32 upstream channels it had no control over. A
+single delivery mechanism was not survivable: a push subscription drops silently when
+the connection dies, and polling alone adds latency and misses anything that arrives and
+is edited between two polls. The build ran **both push and poll into the same handler**,
+and made the duplication harmless instead of trying to prevent it:
+
+| Layer | Job |
+|---|---|
+| push subscription | low latency, normal case |
+| periodic poll | catches everything the subscription missed while disconnected |
+| dedup cache keyed on `(chat_id, msg_id, text_hash)` | makes double delivery a no-op |
+
+> The reliability decision was not "which delivery mechanism is correct". It was
+> **"what is the identity of a message?"** — once that key existed, redundant delivery
+> became a feature rather than a bug to be avoided.
+
+### 15.2 The text hash belongs in the key, not just the ID
+
+`(chat_id, msg_id)` alone looks sufficient and is not. Upstream messages get **edited**,
+and an edit arrives under the same message ID. Keying on the ID alone silently discards
+the corrected version; adding `text_hash` makes a genuine edit a new event and a
+re-delivery a duplicate. The same two-part shape — a stable address plus a content
+hash — is what makes ingestion idempotent in the retrieval work too (§6): content
+hashes short-circuit before the expensive embedding stage, so a full re-sync creates
+nothing.
+
+### 15.3 Domain-driven directory layout survived the growth
+
+The layout was split by domain (the external platform adapter, the upstream channels,
+the parsed events) rather than by
+technical layer (`models/`, `services/`, `utils/`). Across ~360 commits in two months
+this held up for a specific reason: features arrived as **whole domains** ("support a
+new upstream channel format"), not as horizontal slices. A layer-first layout would have
+spread every one of those features across four directories.
+
+### 15.4 "Two repositories" was one project, and admitting that mattered
+
+The work exists as an earlier iteration plus a more mature, English-documented evolution
+of the same system. The honest description is one evolving project. Counting the two
+repositories separately would double both the commit count and the apparent scope — the
+same double-counting trap as a sibling repository holding an older snapshot of the
+backtesting work.
+
+### 15.5 The latency budget was a table, and the worst case was not where the work went
+
+Close-to-action latency was too high, so every step on the path got a measured number:
+
+| Step | Latency |
+|---|---|
+| upstream push delivery | 0–2 s |
+| **poll fallback, if the push was missed** | **up to 60 s** |
+| internal HTTP lookup | 50–200 ms |
+| RPC call to the external platform | 100–500 ms |
+| internal HTTP write-back | 50–100 ms |
+
+Four of the five entries are milliseconds. One is a minute. Reducing the fallback poll
+interval from 60 s to 15 s bought **~45 seconds**; every code-level optimization on the
+other four steps together bought under a second.
+
+> **Write the budget down before optimizing.** The instinct is to tune the code you are
+> looking at; the table shows the worst case lives in a *configuration constant* on a
+> path that only runs when something already went wrong.
+
+Worth naming honestly: the millisecond work was still worth doing, because it applies to
+the *common* case that runs thousands of times a day. The two answers are not in
+competition — but only the table tells you which one you are buying.
+
+### 15.6 Cache the state the action needs, keyed on the pair that identifies it
+
+A local dictionary keyed on `(channel, item)`, populated when a position opens and
+evicted when it closes, removed an internal HTTP round-trip from the time-critical path.
+Reads fall back to HTTP on a cache miss, so the cache is an accelerator and never a
+source of truth — which is what makes eviction bugs slow rather than wrong.
+
+### 15.7 Enable RPC keepalive, or pay reconnection cost on the first call after a quiet period
+
+An idle TCP connection through container networking gets dropped by something in the
+path, and the cost shows up as latency on the *next* real call — the worst possible
+moment. Periodic heartbeats cost nothing and remove a 0–200 ms penalty that only ever
+appeared after the system had been quiet.
+
+### 15.8 Await the irreversible step; dispatch the record of it
+
+The external action is time-critical and irreversible. The database row recording it is
+neither. Dispatching the write-back as a background task instead of awaiting it removed
+50–100 ms from the critical path, with errors logged rather than blocking.
+
+> **The ordering rule: await what you cannot redo, dispatch what you can.** Getting this
+> backwards is common — a slow audit write should never delay the thing being audited.
+
+### 15.9 Non-matching input must not block the handler
+
+Every message that was *not* a signal previously blocked the event handler on an HTTP
+write while being recorded. Under a burst of ordinary chatter, that congests the loop
+that the actual signals arrive on. Recording the non-matches in the background keeps the
+hot path responsive — and the non-matches still get recorded, which is what makes parser
+coverage measurable later.
+
+### 15.10 Cooperative yielding is how you get priorities on one event loop
+
+A low-priority background reconciliation loop sleeps 50 ms between each lookup, so it
+can never monopolise the loop that the latency-critical path shares. It runs every 10 s;
+a few seconds of delay in reconciliation is free, and starving the live path for one
+second is not.
+
+There is no scheduler here and no thread priority — just an explicit `await` in a loop
+that has nothing urgent to do. On a single-threaded event loop that *is* the priority
+mechanism, and omitting it is why "it got slow under load" usually traces back to a
+background job.
+
+## 16 — Gates in front of an action that cannot be undone
+
+### 16.1 Layered gates, each one cheap and independent
+
+The execution path was guarded by a stack of independent gates rather than one
+validation function: a market-condition gate, a per-item constraint check, and an
+exposure cap. The value of the layering is that each gate is individually explainable —
+when an action is refused, the *name of the gate* is the reason, and no single condition
+has to encode the whole policy.
+
+### 16.2 The generic gate that had to be deleted
+
+The most instructive gate in that stack is the one that no longer exists. It derived the
+mandatory bounds for an action from a percentage of the account state whenever the
+incoming request omitted them, and tightened bounds that exceeded the budget.
+
+It was removed, because the derivation produced **absurd values for whole classes of
+item** — the per-unit scaling parameters differ by orders of magnitude between item
+classes, so a formula calibrated on one class returned a lower bound above the current
+price and a negative upper bound on another. Requests now pass their bounds through
+unchanged.
+
+> **A single formula over heterogeneous item classes needs per-class calibration, or it
+> needs deleting.** The failure mode is the dangerous one: it does not raise, it returns
+> a plausible-looking number.
+
+It is also a warning about the shape of §16.1. A stack of gates reads as thorough, and
+one of these gates was actively harmful for most of its life. Layering makes each gate
+*explainable*; it does nothing to make any of them *correct*.
+
+### 16.3 Never hardcode a constraint the platform will tell you
+
+A hardcoded minimum size worked across an entire item class and was rejected outright on
+another, whose minimum was ten times higher — the rejection surfaced only as a numeric
+platform error code. The fix was to query the constraint per item at runtime and keep the
+hardcoded value as a fallback only.
+
+Anything the external platform can be *asked* should not be assumed, and heterogeneous
+item classes are exactly where an assumption that held for months stops holding.
+
+### 16.4 Dry-run is a mode, not a flag someone remembers to pass
+
+Anything whose side effects are irreversible needs a mode in which the entire pipeline
+runs, all gates evaluate, all decisions are logged, and only the final call is
+suppressed. That mode is also the only honest way to test the gates: a gate that has
+never refused anything in a real run is untested.
+
+### 16.5 Secrets discipline and a static analyser earn their place here specifically
+
+`.env` handling and a security linter (`bandit`) are ordinary hygiene in most projects
+and load-bearing in this one, because the process holds live credentials for a
+third-party execution platform. The general rule: **the cost of a leak, not the size of
+the codebase, sets how much hygiene a repository deserves.**
+
+## 17 — Performance engineering: making a search space affordable
+
+### 17.1 130M evaluations in ~235 seconds — and two artefacts that disagree about it
+
+The harness scanned **203 input series × 17 candidate rule types × ~28,800 parameter
+combinations**, over 50,000 rows per series (~10.15M rows total). Its own `learnings.md`
+records the full run at **~235 seconds on 10 of 12 cores — about 23,500 evaluations per
+second.**
+
+A separately recorded note puts the same full run at **about 5 hours**. Both figures are
+written down; they differ by ~75×. I cannot resolve which run each describes, so both are
+kept here and neither should be quoted alone.
+
+> **This is the §12 problem inside my own source material.** Two artefacts recorded a
+> measurement for the same job and nobody reconciled them, so the *number* is now
+> unusable while the *engineering* remains fully citable. A measurement without a
+> recorded run identity decays into folklore.
+
+The composition of the speedup is documented and does not depend on the total:
+
+| Source | Effect |
+|---|---|
+| compiling the hot path | ~100× vs interpreted loops |
+| process-level parallelism | ~10×, near-linear on 10 workers |
+| pruning invalid parameter combinations | ~27 % fewer evaluations |
+| skipping input/rule pairs that produce no events | ~30 % of pairs never entered |
+| validating only the best candidate per pair | ~95 % fewer validation runs |
+
+### 17.2 Measure first, then replace the hot path — not the other way round
+
+The productive sequence was: run it, find where the time actually goes, and replace only
+those functions with JIT-compiled (Numba) and vectorized equivalents. The instinct to
+JIT-compile everything is worse than useless: compilation has its own cost, and
+`nopython` mode rejects exactly the loosely-typed convenience code that most of a
+research harness is made of.
+
+### 17.3 The unit of optimization is "per-evaluation cost × number of evaluations"
+
+At 130M evaluations, a saving of 100 microseconds per evaluation is about **3.6 hours**.
+That multiplication is the whole reason a research harness rewards optimization work
+that would be premature anywhere else: nothing in a request/response service has a
+multiplier like that.
+
+### 17.4 Interpreted-language loops are the thing being removed, not the thing being sped up
+
+The gain came from *removing* per-element interpretation — expressing the evaluation over
+whole arrays, or compiling the loop down — rather than from micro-tuning the loop body.
+Vectorization and JIT are two routes to the same destination; which one wins depends on
+whether the operation is expressible as array algebra at all.
+
+### 17.5 AI-assisted code, human optimization strategy
+
+The codebase was largely model-generated. The part that was genuinely engineered was the
+*strategy*: deciding what to measure, choosing which hot paths to replace, and judging
+when the runtime was good enough to stop. That split is worth naming honestly, and it is
+the same split that shows up across every project in this document.
+
+### 17.6 One compiled call per batch, not per item — the boundary is the cost
+
+The naive structure calls the compiled kernel once per parameter combination from the
+interpreter. At roughly a microsecond of call overhead and millions of combinations,
+**the boundary crossings alone cost seconds** before any work happens.
+
+The rewrite moved the entire parameter grid — eight nested loops — *inside* one compiled
+function, which calls the kernel from compiled code. The overhead is then paid once per
+input/rule pair (thousands of times) instead of once per combination (millions).
+
+> **The single most impactful decision in the whole harness: never leave compiled code
+> inside the inner loop.** Everything else — parallelism, caching, pruning — stacks on
+> top of that and none of it substitutes for it.
+
+### 17.7 Persist the compiled artefacts, or pay warm-up on every run
+
+Compilation is cached to disk, so the first run pays ~10 s and every later run starts
+immediately. For a tool that is re-run dozens of times a day during research, warm-up
+cost is not a one-off — it is a per-run tax that a single flag removes.
+
+### 17.8 Keep dtypes stable, or the compiler silently builds a second version
+
+Compilation is specialised per input type. Passing 32-bit floats on one call and 64-bit
+on another triggers a **second compilation**, doubling warm-up for no reason. Every array
+is therefore cast explicitly at the boundary, once, on load.
+
+This is the quiet one: nothing fails, nothing warns, the run is just slower than the last
+one and nobody knows why.
+
+### 17.9 Compute shared intermediates once, not once per consumer
+
+Twelve derived series feed seventeen candidate rule types. Computing them per rule type
+means **17× redundant work** over 50,000 rows per input series. One pass producing all
+twelve, shared across the consumers, saved roughly 16× on that stage.
+
+The general shape: whenever N consumers each derive the same intermediate from the same
+source, the intermediate belongs to the source.
+
+### 17.10 Processes, not threads, for CPU-bound work — and leave cores for the machine
+
+Interpreted-language threading cannot parallelise CPU-bound work under a global lock;
+separate OS processes can, and scaled near-linearly across 10 workers. The worker count
+is `cpu_count() - 2`, deliberately: saturating every core makes the machine unresponsive
+and the monitoring that tells you the run is healthy is the first thing to starve.
+
+### 17.11 Cache the inputs on disk, and cast them on the way in
+
+Fetching 50,000 rows per input series from the external platform took 5–30 s each —
+up to ~100 minutes for 203 series. Cached to local files, load time is under 0.1 s. The
+same load function does the dtype cast from §17.8, so the guarantee is established once
+at the only place data enters the system.
+
+### 17.12 Four ways to not do the work at all
+
+The cheapest evaluation is the one that never runs. Four separate skips, each inside the
+compiled loop where the check is nearly free:
+
+| Skip | Effect |
+|---|---|
+| parameter combinations that are invalid by definition | ~27 % fewer |
+| input/rule pairs that produce **zero** events | ~30 % of pairs never entered |
+| results below a **minimum sample count** (3) | discarded before allocating |
+| expensive validation on anything but the best candidate | ~95 % fewer validation runs |
+
+Two are pure performance. The other two are *also* correctness: a result from one or two
+samples is statistically meaningless, and letting it into the ranking is how a single
+lucky outcome ends up looking like a discovery.
+
+## 18 — Validating a search over many candidates without fooling yourself
+
+### 18.1 Searching 130M candidates means the best result is mostly luck
+
+Any large parameter sweep will produce a spectacular top result whether or not the
+underlying idea works, because the search itself is a selection process. This is the
+same failure the retrieval work hit from a different direction (§6): a number that
+looks great is a reason to audit the process that produced it, not to celebrate.
+
+### 18.2 Walk-forward validation, because a single split is one sample
+
+Fitting on one period and evaluating on the next, then rolling both windows forward,
+turns a single pass/fail into a distribution over many out-of-sample periods. A
+candidate that survives one split has an n of 1 — precisely the problem that made a set
+of social-media engagement figures uninterpretable elsewhere in this work.
+
+### 18.3 A two-stage promotion gate separates "interesting" from "trusted"
+
+Candidates were promoted in two stages rather than one: a cheap composite score ranked
+the full space, and only survivors faced the expensive validation. This is the same
+economics as verification in the agent work (§5): the cheap stage scales with the number
+of *candidates*, the expensive stage with the number that *survived*, so the gate between
+them is where the budget is actually decided.
+
+### 18.4 Monte Carlo answers the question a single average cannot
+
+Reordering outcomes randomly across many simulated runs gives the *distribution* of
+worst cases rather than one historical path. An average result hides whether an early bad
+streak would have ended the run before the good part arrived — and a candidate that cannot
+survive its own worst ordering is not viable regardless of its mean.
+
+### 18.5 A composite score is a set of weights, and the weights are the model
+
+Ranking candidates by one blended number is convenient and quietly encodes a value
+judgement about how much upside is worth how much worst-case loss. The score is not an
+objective measurement; it is a hypothesis, and it should be as easy to change and re-run
+as any other parameter.
+
+### 18.6 Discard below a minimum sample count, before it can win
+
+Any candidate producing fewer than three observations is dropped inside the evaluation
+kernel — not filtered later. With millions of candidates, *something* will produce a
+single spectacular observation, and a ranking that admits it will put it on top.
+
+The threshold is the cheapest defence against selection noise there is, and placing it
+before result storage means the noise never reaches the sort.
+
+### 18.7 A composite score is a product of penalties, and every factor is a value judgement
+
+The ranking multiplies an out-of-sample success rate by `(1 − risk-of-ruin)`, by
+`(1 − mean worst-case loss)`, by a sample-confidence factor and by a window-confidence
+factor. The *multiplicative* form is the interesting part: any factor near zero
+annihilates the score, so a candidate cannot buy its way to the top on one strong
+dimension.
+
+That is a deliberate policy, not a measurement — and worth restating from §18.5: the
+weights and the functional form *are* the hypothesis. They should be as easy to change
+and re-run as any parameter.
+
+### 18.8 Model the degradation explicitly, then require survival under the pessimistic case
+
+Idealised evaluation always flatters. A dedicated model applies slippage, spread widening
+under volatility, fill probability, latency delay and per-side fees, in five named
+scenarios from "ideal" to "worst case".
+
+> **The decision rule is the point: a candidate that only survives the ideal scenario is
+> rejected.** Bracketing the realistic range turns "it looked good offline" into a
+> statement with a floor.
+
+Fill probability is the parameter people forget — 5 % of actions missed under normal
+conditions and 20 % under fast ones is not a rounding error, and an offline harness
+assumes 100 % by default.
+
+### 18.9 Classify the conditions, then ask where the candidate fails
+
+Inputs are classified into five regimes — two directional, one range-bound, one
+high-variance, one low-variance — and per-regime success rates are computed separately.
+
+A candidate with a 60 % overall success rate can be 90 % in one regime and 20 % in
+another. The aggregate hides both facts, and only the split tells you whether the answer
+is "reject it" or "gate it to the regime where it works". Aggregate metrics describe a
+mixture; they do not describe any of its components.
+
+### 18.10 Monte Carlo with costs, not Monte Carlo with hope
+
+10,000 simulations reorder outcomes randomly *with* slippage, spread, fees and an
+adverse-fill percentage applied, producing probabilities rather than a point estimate.
+Running the same simulation on frictionless outcomes is the common version and it answers
+a question nobody has: performance typically degrades 30–50 % once costs are in, so a
+cost-free distribution is not a conservative estimate — it is a different system.
+
+### 18.11 Estimate the cost parameter from the data instead of assuming one
+
+Rather than a fixed cost assumption across all inputs, the typical cost per input series
+is estimated from that series' own dispersion on calm rows. A single global constant
+overestimates cost for the most liquid inputs and underestimates it for the thinnest —
+i.e. it is wrong in both directions at once, which is worse than being uniformly
+pessimistic, because it reorders the ranking.
+
+### 18.12 Trigger on the transition, not on the state
+
+A condition that stays true for twenty consecutive rows generates twenty events if the
+rule tests the *state*, and one if it tests the *edge* — current row past the threshold,
+previous row not. Twenty events means twenty entries into what is actually one
+occurrence.
+
+The same bug shape appears far outside this domain: alerting that re-fires while a
+threshold remains breached, a watcher that re-processes an unchanged file, a retry loop
+that treats "still failing" as "failed again".
+
+## 19 — Reproducible environments as a correctness property
+
+### 19.1 Containerizing an existing pipeline exposed two invisible dependencies
+
+Moving a working local pipeline into a container revealed two binaries it had always
+needed and never declared — `poppler-utils` for PDF text extraction, and `git`, which was
+being called to stamp the environment into each output. Both merely happened to exist on
+the host. Nothing was broken before the move; the dependency list was simply **wrong in a
+way that only a fresh environment can reveal.**
+
+### 19.2 An install-check that synthesizes one real unit beats a version list
+
+The check that replaced "hope it works" does four things: verifies package versions,
+asserts the ML framework is the CPU build (a CUDA build on a CPU-only machine installs
+and then fails at runtime), confirms the media tool is present, and then **runs one real
+paragraph through the model, reads it back, and reports this machine's real-time factor.**
+A version list proves the environment installed. Producing one real output proves it
+works, and gives you the machine's speed as a by-product.
+
+### 19.3 A measurement carries its environment with it
+
+The container shipped `ffmpeg` 7.1 while the loudness targets had been measured against
+6.1 — and two-pass loudness normalization changed behaviour in 7. The recorded rule is
+therefore not a number but a procedure: **re-measure one chapter before trusting a full
+run.** Any measurement that depends on a tool version needs that version written next to
+it, or it silently becomes a guess.
+
+### 19.4 Host UID/GID in the image, or every output file is root-owned
+
+Building the container user from `HOST_UID`/`HOST_GID` is a two-line change that decides
+whether the pipeline's output is usable without `sudo`. Model weights went on a volume
+rather than into the image for the related reason: an image that carries gigabytes of
+weights is rebuilt slowly and often for no benefit.
+
+### 19.5 "Nothing is installed on the host any more" is the actual goal
+
+The end state worth aiming for is not "it runs in Docker too" but that the host has no
+project-specific installation at all. Only then is the declared environment the *real*
+environment, and only then does §19.1 stop recurring.
+
+## 20 — Legacy systems: bridging, modernizing, and what git history hides
+
+### 20.1 Git history lied about the project's age by thirteen years
+
+A long-running codebase showed a first commit in October 2022. The project started in
+2009 — 2022 is when it was migrated from SVN to git. Any tool or agent that derives
+"project start" from `git log` gets this wrong, confidently. The same class of error as
+§12: the artefact records when the *repository* began, not when the *work* did.
+
+### 20.2 A `legacy/` tree that still exists is a feature of the honest description
+
+The modernization onto a current framework and ORM is real and incomplete: a `legacy/`
+tree remains alongside it. Describing the stack as simply "modern framework" would be
+false; the truthful and more interesting statement is that two eras coexist in one
+codebase and the boundary between them is where the work happens.
+
+### 20.3 Automated refactoring tools are for mechanical migrations only
+
+A rules-based refactoring tool plus a formatter handle the mechanical part of a
+migration — signature changes, deprecated call sites, syntax modernization — across
+hundreds of files far more reliably than a human or a model editing by hand. What they
+cannot do is the part that matters: deciding which domain concept the legacy code was
+actually expressing.
+
+### 20.4 A database-heavy domain resists the tidy version of modernization
+
+152 SQL files and a migration history are not incidental to the domain; they *are* the
+domain. Modernizing the application layer while the schema keeps its historically-grown
+shape is the realistic path, and it means the ORM mapping carries the compromises rather
+than hiding them.
+
+### 20.5 Bridging a modern SPA into a legacy CMS: the asset filenames are the hard part
+
+Embedding a modern typed SPA into a legacy PHP CMS via a shortcode and an editor button
+was straightforward except for one thing: the build tool emits **content-hashed
+filenames**, and the CMS wants to register a static asset path. The working answer was
+dynamic asset registration — read the build manifest at runtime instead of hard-coding a
+filename that changes on every build. Any hard-coded hashed filename is a bug with a
+delayed fuse.
+
+### 20.6 A typed API-call base component pays for itself at the third endpoint
+
+The SPA fetched several resource types through one REST API. A single generic, typed
+call component gave every endpoint the same error handling, loading state and response
+contract. Written for one endpoint it looks like over-engineering; by the third it is
+the only reason the code is still readable.
+
+### 20.7 Reproducible local dev via lifecycle hooks, not a README section
+
+Database export/import wired into the local environment's pre-stop and post-start hooks
+means the state travels with the environment automatically. Every instruction in a README
+that a developer must remember to run is a step that will eventually be skipped.
+
+## 21 — Framework-level architecture that held up
+
+### 21.1 Interface-first service layers, arrived at by refactoring rather than up front
+
+An authentication and import feature ended up as interfaces (`AuthenticationInterface`,
+`FileHandlerInterface`) with concrete token-auth, session-auth and import services behind
+them. The order matters: the interfaces were **extracted** by moving logic out of
+controllers, not designed before the logic existed. The abstraction was therefore shaped
+by two real implementations rather than by a guess about the second one.
+
+### 21.2 Two authentication models in one application is a legitimate design, not indecision
+
+Token-based auth for a JSON API and session-based auth for a web login coexist because
+they answer different questions — one has no server-side session to speak of, the other
+does. Separate API and web controllers, and separate middleware, keeps the two from
+leaking into each other.
+
+### 21.3 Custom middleware is the right place for a cross-cutting check
+
+A token check belongs in middleware, not at the top of every controller action. The test
+of whether something is middleware: would forgetting it in one place be a security bug?
+If yes, it must not be something a developer can forget.
+
+### 21.4 "PHPUnit is configured" is not "there are tests"
+
+One repository carries a full test-runner configuration and only the framework's default
+stubs; its README lists "add automated tests" as an open item. A configured runner
+produces a green run over nothing at all — the metric worth reporting is what is
+*asserted*, never that the suite passes.
+
+### 21.5 Working inside an existing open-source package teaches internals nothing else does
+
+Adding custom IDs and timestamps to pivot-table events in an existing package meant
+reading the ORM's relationship internals — how many-to-many and polymorphic relations
+dispatch model events — rather than reading its documentation. It is one focused commit
+on top of ~187 upstream ones, and describing it as "contributed a feature to an existing
+package" rather than "built a package" is the difference between a true claim and a
+false one.
+
+### 21.6 One-time provisioning needs an idempotency flag and a hook that cannot be disabled
+
+Automated environment setup ran in a CMS with no first-boot hook of its own. It was
+placed in the directory whose contents load unconditionally and cannot be deactivated
+through the admin UI — the right choice for provisioning code, which must run even if
+someone disables everything else.
+
+The correctness detail is the stored completion flag: the routine checks it, runs once,
+and sets it. Provisioning that runs on *every* request because nobody recorded that it
+already ran is a self-inflicted outage, and the flag is one option row.
+
+### 21.7 A 67-line parser with a type mismatch nothing would catch
+
+A small refactoring case study — one class, 67 lines, turning a supplier record into a
+canonical one — contains a bug worth more than its size. The category lookup casts the
+group field to an integer:
+
+```php
+$category = $this->getCategory((int) $product['groupId']);
+```
+
+and a later branch compares the same field to a **string**:
+
+```php
+if (str_ends_with($product['number'], '_X') || $product['groupId'] === '12') {
+```
+
+With strict comparison, one of those two is always wrong: if the field arrives as an
+integer the branch never fires, and if it arrives as a string the cast is silently
+covering for it. The record still parses. Nothing throws. One classification is just
+quietly never assigned.
+
+> **The lesson is about where types are asserted.** Both lines are defensible in
+> isolation; the defect exists only in the *relationship* between them, which is exactly
+> what a reviewer scanning a 67-line file does not check. A typed value object at the
+> boundary makes the question unaskable — and the same class of defect is what §12's
+> grounding rules are for in text: coercion at the point of use hides the disagreement
+> instead of surfacing it.
+
+## 22 — Migrating a legacy codebase while it stays online
+
+Everything in this section is measured from one long-running community codebase (I),
+mid-migration from a historically-grown structure onto a modern framework and ORM.
+
+### 22.1 A 2,665-line entry point became a 27-line redirect shim
+
+The obvious move when replacing a legacy entry point is to delete it. That breaks the
+site, because **the old URLs are inside the content**: years of user-written posts link
+to the old file with its old query string. What shipped instead was the old path kept as
+a shim that parses the legacy query parameters, maps them onto the new route and issues a
+`301`. Two files went from **2,665 and 2,101 lines to about 26 each** — a 4,717-line
+deletion in one commit, with no dead links.
+
+> **The lesson generalises past URLs: a migration is not finished when the code moves.
+> It is finished when everything that *points at* the old shape still resolves** — and
+> persisted user data is the pointer you cannot edit.
+
+### 22.2 One new route, several legacy parameter names
+
+The shim maps two *different* legacy query parameters onto the same new path, because the
+old entry point had accumulated more than one name for the same identifier over the
+years. Reading the legacy call sites was the only way to find that out; the new route
+would have looked correct and quietly 404'd for one of the two.
+
+It also validates the parameter (`is_numeric`, then an integer cast) before building the
+redirect target — a shim is still a public entry point.
+
+### 22.3 Five near-identical subsystems, one shared base — and the honest limit
+
+Five parallel discussion subsystems had each grown their own copy of the same logic. The
+migration pulled the shared behaviour into one abstract controller and rebuilt the five
+as subclasses. The numbers are the interesting part:
+
+| | Lines |
+|---|---|
+| shared abstract base | 161 |
+| the five subclasses | 655, 669, 767, 796, 982 |
+
+So the shared base is **small relative to what remains per subsystem**. Duplication was
+reduced, not eliminated — and calling that "unified" would overstate it. A refactoring
+that leaves 80 % of the volume in the subclasses has still bought the thing that
+mattered: one place to change the behaviour that is genuinely common, and a diff between
+subsystems that is now readable.
+
+The related small win from the same pass: all five were made to order records
+consistently. Divergent behaviour across near-identical subsystems is a bug that nobody
+reports because each one looks fine on its own.
+
+### 22.4 Automated refactoring is run as a ratchet, not once
+
+The refactoring tool's configuration is the most instructive file in the repository. It
+targets **PHP 7.0 rules on a codebase running 8.2**, and sets dead-code and type-coverage
+levels to **0**:
+
+- the *language* floor is raised in stages, so each run produces a reviewable diff rather than one unmergeable rewrite;
+- levels start at 0 and are incremented deliberately — a ratchet, so the codebase can only get cleaner;
+- vendored third-party legacy is explicitly skipped, because rewriting code you do not own creates a merge conflict with every future update;
+- it runs in parallel over eleven paths, including both the modern tree *and* the legacy one.
+
+This is the counterpoint to §20.3: the tool is genuinely for mechanical work, and the
+*engineering* is in the staging policy around it.
+
+### 22.5 A committed `.env` is not automatically a leak
+
+The repository tracks `.env`, `.env.dev` and `.env.test`, which looks like the classic
+finding — and is not one. The framework's convention is that committed files hold
+**defaults**, uncommitted `.local` files hold overrides, and real environment variables
+win over both; the tracked file says so in its own header. The general rule worth keeping:
+**"is a secret file committed" is the wrong question. "Does this file contain a secret"
+is the right one** — and only one of the two can be answered by a filename check, which is
+why an automated hygiene gate needs the second check as well.
+
+### 22.6 The un-migrated tail is visible in the repository root, and that is honest
+
+Eighteen loose legacy PHP files still sit at the top level, next to a modern `src/`
+(67 files), a `legacy/` tree (54) and a real test suite (20 test classes plus integration
+fixtures). An in-progress migration looks like this. The alternative — hiding the
+remainder in a directory named to suggest it is finished — costs the one thing the
+structure is currently giving every contributor for free: an accurate map of what has
+been done.
+
+## 23 — Working method: the parts that turned out to matter
 
 Distilled, because these are the ones that changed outcomes repeatedly.
 
@@ -2327,7 +3014,7 @@ Distilled, because these are the ones that changed outcomes repeatedly.
 
 ---
 
-## 16 — Open problems, honestly labelled
+## 24 — Open problems, honestly labelled
 
 Kept because a known-unclosed risk is more useful than a tidy list.
 

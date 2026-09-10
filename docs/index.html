@@ -9,13 +9,13 @@
 <meta property="og:title" content="Engineering notes — agents, retrieval, evaluation">
 <meta property="og:description" content="Measured findings from two months of building LLM pipelines: what an agent run actually costs, why structure beats instruction, and the error classes nothing downstream can catch.">
 <meta property="og:type" content="article">
-<meta property="og:url" content="https://jackylyn1.github.io/">
-<meta property="og:image" content="https://jackylyn1.github.io/assets/og.png">
+<meta property="og:url" content="https://jackylyn1.github.io/notes/">
+<meta property="og:image" content="https://jackylyn1.github.io/notes/assets/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://jackylyn1.github.io/assets/og.png">
-<link rel="canonical" href="https://jackylyn1.github.io/">
+<meta name="twitter:image" content="https://jackylyn1.github.io/notes/assets/og.png">
+<link rel="canonical" href="https://jackylyn1.github.io/notes/">
 <link rel="stylesheet" href="assets/site.css">
 </head>
 <body>
@@ -47,8 +47,16 @@
 <li><a href="#grounding-honesty-and-factual-discipline-in-generated-text">12 — Grounding, honesty and factual discipline in generated text</a></li>
 <li><a href="#presentations-and-visual-output-as-an-engineering-problem">13 — Presentations and visual output as an engineering problem</a></li>
 <li><a href="#repository-data-and-git-hygiene-around-ai-work">14 — Repository, data and git hygiene around AI work</a></li>
-<li><a href="#working-method-the-parts-that-turned-out-to-matter">15 — Working method: the parts that turned out to matter</a></li>
-<li><a href="#open-problems-honestly-labelled">16 — Open problems, honestly labelled</a></li>
+<li><a href="#reliability-on-an-ingestion-path-you-do-not-own">15 — Reliability on an ingestion path you do not own</a></li>
+<li><a href="#gates-in-front-of-an-action-that-cannot-be-undone">16 — Gates in front of an action that cannot be undone</a></li>
+<li><a href="#performance-engineering-making-a-search-space-affordable">17 — Performance engineering: making a search space affordable</a></li>
+<li><a href="#validating-a-search-over-many-candidates-without-fooling-yourself">18 — Validating a search over many candidates without fooling yourself</a></li>
+<li><a href="#reproducible-environments-as-a-correctness-property">19 — Reproducible environments as a correctness property</a></li>
+<li><a href="#legacy-systems-bridging-modernizing-and-what-git-history-hides">20 — Legacy systems: bridging, modernizing, and what git history hides</a></li>
+<li><a href="#framework-level-architecture-that-held-up">21 — Framework-level architecture that held up</a></li>
+<li><a href="#migrating-a-legacy-codebase-while-it-stays-online">22 — Migrating a legacy codebase while it stays online</a></li>
+<li><a href="#working-method-the-parts-that-turned-out-to-matter">23 — Working method: the parts that turned out to matter</a></li>
+<li><a href="#open-problems-honestly-labelled">24 — Open problems, honestly labelled</a></li>
 </ul>
 </div>
 
@@ -109,6 +117,18 @@ reader would actually want out of it, not by project or chronology.</p>
 <tr>
 <td>G</td>
 <td>A design-study for legal-document search on a cloud platform</td>
+</tr>
+<tr>
+<td>H</td>
+<td>Distributed signal-ingestion and order-execution system with layered risk gates</td>
+</tr>
+<tr>
+<td>I</td>
+<td>Long-running community browser game, mid-modernization off a legacy stack</td>
+</tr>
+<tr>
+<td>J</td>
+<td>Smaller framework builds: auth/import services, an SPA-in-legacy-CMS plugin, an OSS package feature</td>
 </tr>
 </tbody>
 </table>
@@ -887,6 +907,30 @@ about wording:</p>
   ever describe them accurately.</li>
 </ul>
 <hr>
+<h3 id="when-one-computation-exists-twice-test-that-the-two-agree">4.13 When one computation exists twice, test that the two agree<a class="headerlink" href="#when-one-computation-exists-twice-test-that-the-two-agree" title="Link to this section">#</a></h3>
+<p>The research harness and the live path each implement the same derived series — moving
+averages, rolling deviation, the smoothing function, the oscillators. Two
+implementations, because one is compiled for batch throughput and the other consumes a
+stream row by row.</p>
+<p>Two test suites were not the answer. The repository has a third: <strong>a dedicated
+equality-test module asserting that the two implementations return the same values on
+the same input</strong> — one equality case per shared function, six of them. A companion
+document tabulates every method in both trees against three columns: <em>test for the
+research version?</em>, <em>test for the live version?</em>, <em>equality test?</em> — so a function with
+two implementations and no equality test is visible as a blank cell rather than as an
+absence nobody notices.</p>
+<blockquote>
+<p><strong>Per-side tests prove each implementation matches its author's intent. Only the
+equality test proves they match each other</strong> — and the failure that costs you money is
+the divergence, not a bug in either one.</p>
+</blockquote>
+<p>This is the offline/online skew problem stated in the plainest possible way. It applies
+to any system where something is evaluated in batch and then executed in a stream: a
+model scored offline and served online, a report computed nightly and also on demand, a
+permission check in a query and in a template. Two implementations of one rule will drift,
+and nothing in either test suite will notice.</p>
+<p>The cheap version, if you have no equality test: make the batch path and the live path
+call the <em>same</em> function, and accept the performance cost until it is proven to matter.</p>
 <h2 id="search-coverage-and-the-classes-of-error-nothing-downstream-can-catch">5 — Search, coverage and the classes of error nothing downstream can catch<a class="headerlink" href="#search-coverage-and-the-classes-of-error-nothing-downstream-can-catch" title="Link to this section">#</a></h2>
 <h3 id="enumerate-to-find-absences-trace-to-find-defects">5.1 Enumerate to find absences; trace to find defects<a class="headerlink" href="#enumerate-to-find-absences-trace-to-find-defects" title="Link to this section">#</a></h3>
 <p>The same byte-identical audit task, run four times, returned <strong>5 / 5 / 4 / 6 findings</strong>.
@@ -2309,7 +2353,600 @@ pretend to measure it.</strong></p>
 </ul>
 <p>Stating the reason is what makes it a decision rather than a gap.</p>
 <hr>
-<h2 id="working-method-the-parts-that-turned-out-to-matter">15 — Working method: the parts that turned out to matter<a class="headerlink" href="#working-method-the-parts-that-turned-out-to-matter" title="Link to this section">#</a></h2>
+<h2 id="reliability-on-an-ingestion-path-you-do-not-own">15 — Reliability on an ingestion path you do not own<a class="headerlink" href="#reliability-on-an-ingestion-path-you-do-not-own" title="Link to this section">#</a></h2>
+<h3 id="two-delivery-mechanisms-one-identity-key">15.1 Two delivery mechanisms, one identity key<a class="headerlink" href="#two-delivery-mechanisms-one-identity-key" title="Link to this section">#</a></h3>
+<p>An ingestion service read messages from ~32 upstream channels it had no control over. A
+single delivery mechanism was not survivable: a push subscription drops silently when
+the connection dies, and polling alone adds latency and misses anything that arrives and
+is edited between two polls. The build ran <strong>both push and poll into the same handler</strong>,
+and made the duplication harmless instead of trying to prevent it:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Job</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>push subscription</td>
+<td>low latency, normal case</td>
+</tr>
+<tr>
+<td>periodic poll</td>
+<td>catches everything the subscription missed while disconnected</td>
+</tr>
+<tr>
+<td>dedup cache keyed on <code>(chat_id, msg_id, text_hash)</code></td>
+<td>makes double delivery a no-op</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>The reliability decision was not "which delivery mechanism is correct". It was
+<strong>"what is the identity of a message?"</strong> — once that key existed, redundant delivery
+became a feature rather than a bug to be avoided.</p>
+</blockquote>
+<h3 id="the-text-hash-belongs-in-the-key-not-just-the-id">15.2 The text hash belongs in the key, not just the ID<a class="headerlink" href="#the-text-hash-belongs-in-the-key-not-just-the-id" title="Link to this section">#</a></h3>
+<p><code>(chat_id, msg_id)</code> alone looks sufficient and is not. Upstream messages get <strong>edited</strong>,
+and an edit arrives under the same message ID. Keying on the ID alone silently discards
+the corrected version; adding <code>text_hash</code> makes a genuine edit a new event and a
+re-delivery a duplicate. The same two-part shape — a stable address plus a content
+hash — is what makes ingestion idempotent in the retrieval work too (§6): content
+hashes short-circuit before the expensive embedding stage, so a full re-sync creates
+nothing.</p>
+<h3 id="domain-driven-directory-layout-survived-the-growth">15.3 Domain-driven directory layout survived the growth<a class="headerlink" href="#domain-driven-directory-layout-survived-the-growth" title="Link to this section">#</a></h3>
+<p>The layout was split by domain (the external platform adapter, the upstream channels,
+the parsed events) rather than by
+technical layer (<code>models/</code>, <code>services/</code>, <code>utils/</code>). Across ~360 commits in two months
+this held up for a specific reason: features arrived as <strong>whole domains</strong> ("support a
+new upstream channel format"), not as horizontal slices. A layer-first layout would have
+spread every one of those features across four directories.</p>
+<h3 id="two-repositories-was-one-project-and-admitting-that-mattered">15.4 "Two repositories" was one project, and admitting that mattered<a class="headerlink" href="#two-repositories-was-one-project-and-admitting-that-mattered" title="Link to this section">#</a></h3>
+<p>The work exists as an earlier iteration plus a more mature, English-documented evolution
+of the same system. The honest description is one evolving project. Counting the two
+repositories separately would double both the commit count and the apparent scope — the
+same double-counting trap as a sibling repository holding an older snapshot of the
+backtesting work.</p>
+<h3 id="the-latency-budget-was-a-table-and-the-worst-case-was-not-where-the-work-went">15.5 The latency budget was a table, and the worst case was not where the work went<a class="headerlink" href="#the-latency-budget-was-a-table-and-the-worst-case-was-not-where-the-work-went" title="Link to this section">#</a></h3>
+<p>Close-to-action latency was too high, so every step on the path got a measured number:</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Latency</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>upstream push delivery</td>
+<td>0–2 s</td>
+</tr>
+<tr>
+<td><strong>poll fallback, if the push was missed</strong></td>
+<td><strong>up to 60 s</strong></td>
+</tr>
+<tr>
+<td>internal HTTP lookup</td>
+<td>50–200 ms</td>
+</tr>
+<tr>
+<td>RPC call to the external platform</td>
+<td>100–500 ms</td>
+</tr>
+<tr>
+<td>internal HTTP write-back</td>
+<td>50–100 ms</td>
+</tr>
+</tbody>
+</table>
+<p>Four of the five entries are milliseconds. One is a minute. Reducing the fallback poll
+interval from 60 s to 15 s bought <strong>~45 seconds</strong>; every code-level optimization on the
+other four steps together bought under a second.</p>
+<blockquote>
+<p><strong>Write the budget down before optimizing.</strong> The instinct is to tune the code you are
+looking at; the table shows the worst case lives in a <em>configuration constant</em> on a
+path that only runs when something already went wrong.</p>
+</blockquote>
+<p>Worth naming honestly: the millisecond work was still worth doing, because it applies to
+the <em>common</em> case that runs thousands of times a day. The two answers are not in
+competition — but only the table tells you which one you are buying.</p>
+<h3 id="cache-the-state-the-action-needs-keyed-on-the-pair-that-identifies-it">15.6 Cache the state the action needs, keyed on the pair that identifies it<a class="headerlink" href="#cache-the-state-the-action-needs-keyed-on-the-pair-that-identifies-it" title="Link to this section">#</a></h3>
+<p>A local dictionary keyed on <code>(channel, item)</code>, populated when a position opens and
+evicted when it closes, removed an internal HTTP round-trip from the time-critical path.
+Reads fall back to HTTP on a cache miss, so the cache is an accelerator and never a
+source of truth — which is what makes eviction bugs slow rather than wrong.</p>
+<h3 id="enable-rpc-keepalive-or-pay-reconnection-cost-on-the-first-call-after-a-quiet-period">15.7 Enable RPC keepalive, or pay reconnection cost on the first call after a quiet period<a class="headerlink" href="#enable-rpc-keepalive-or-pay-reconnection-cost-on-the-first-call-after-a-quiet-period" title="Link to this section">#</a></h3>
+<p>An idle TCP connection through container networking gets dropped by something in the
+path, and the cost shows up as latency on the <em>next</em> real call — the worst possible
+moment. Periodic heartbeats cost nothing and remove a 0–200 ms penalty that only ever
+appeared after the system had been quiet.</p>
+<h3 id="await-the-irreversible-step-dispatch-the-record-of-it">15.8 Await the irreversible step; dispatch the record of it<a class="headerlink" href="#await-the-irreversible-step-dispatch-the-record-of-it" title="Link to this section">#</a></h3>
+<p>The external action is time-critical and irreversible. The database row recording it is
+neither. Dispatching the write-back as a background task instead of awaiting it removed
+50–100 ms from the critical path, with errors logged rather than blocking.</p>
+<blockquote>
+<p><strong>The ordering rule: await what you cannot redo, dispatch what you can.</strong> Getting this
+backwards is common — a slow audit write should never delay the thing being audited.</p>
+</blockquote>
+<h3 id="non-matching-input-must-not-block-the-handler">15.9 Non-matching input must not block the handler<a class="headerlink" href="#non-matching-input-must-not-block-the-handler" title="Link to this section">#</a></h3>
+<p>Every message that was <em>not</em> a signal previously blocked the event handler on an HTTP
+write while being recorded. Under a burst of ordinary chatter, that congests the loop
+that the actual signals arrive on. Recording the non-matches in the background keeps the
+hot path responsive — and the non-matches still get recorded, which is what makes parser
+coverage measurable later.</p>
+<h3 id="cooperative-yielding-is-how-you-get-priorities-on-one-event-loop">15.10 Cooperative yielding is how you get priorities on one event loop<a class="headerlink" href="#cooperative-yielding-is-how-you-get-priorities-on-one-event-loop" title="Link to this section">#</a></h3>
+<p>A low-priority background reconciliation loop sleeps 50 ms between each lookup, so it
+can never monopolise the loop that the latency-critical path shares. It runs every 10 s;
+a few seconds of delay in reconciliation is free, and starving the live path for one
+second is not.</p>
+<p>There is no scheduler here and no thread priority — just an explicit <code>await</code> in a loop
+that has nothing urgent to do. On a single-threaded event loop that <em>is</em> the priority
+mechanism, and omitting it is why "it got slow under load" usually traces back to a
+background job.</p>
+<h2 id="gates-in-front-of-an-action-that-cannot-be-undone">16 — Gates in front of an action that cannot be undone<a class="headerlink" href="#gates-in-front-of-an-action-that-cannot-be-undone" title="Link to this section">#</a></h2>
+<h3 id="layered-gates-each-one-cheap-and-independent">16.1 Layered gates, each one cheap and independent<a class="headerlink" href="#layered-gates-each-one-cheap-and-independent" title="Link to this section">#</a></h3>
+<p>The execution path was guarded by a stack of independent gates rather than one
+validation function: a market-condition gate, a per-item constraint check, and an
+exposure cap. The value of the layering is that each gate is individually explainable —
+when an action is refused, the <em>name of the gate</em> is the reason, and no single condition
+has to encode the whole policy.</p>
+<h3 id="the-generic-gate-that-had-to-be-deleted">16.2 The generic gate that had to be deleted<a class="headerlink" href="#the-generic-gate-that-had-to-be-deleted" title="Link to this section">#</a></h3>
+<p>The most instructive gate in that stack is the one that no longer exists. It derived the
+mandatory bounds for an action from a percentage of the account state whenever the
+incoming request omitted them, and tightened bounds that exceeded the budget.</p>
+<p>It was removed, because the derivation produced <strong>absurd values for whole classes of
+item</strong> — the per-unit scaling parameters differ by orders of magnitude between item
+classes, so a formula calibrated on one class returned a lower bound above the current
+price and a negative upper bound on another. Requests now pass their bounds through
+unchanged.</p>
+<blockquote>
+<p><strong>A single formula over heterogeneous item classes needs per-class calibration, or it
+needs deleting.</strong> The failure mode is the dangerous one: it does not raise, it returns
+a plausible-looking number.</p>
+</blockquote>
+<p>It is also a warning about the shape of §16.1. A stack of gates reads as thorough, and
+one of these gates was actively harmful for most of its life. Layering makes each gate
+<em>explainable</em>; it does nothing to make any of them <em>correct</em>.</p>
+<h3 id="never-hardcode-a-constraint-the-platform-will-tell-you">16.3 Never hardcode a constraint the platform will tell you<a class="headerlink" href="#never-hardcode-a-constraint-the-platform-will-tell-you" title="Link to this section">#</a></h3>
+<p>A hardcoded minimum size worked across an entire item class and was rejected outright on
+another, whose minimum was ten times higher — the rejection surfaced only as a numeric
+platform error code. The fix was to query the constraint per item at runtime and keep the
+hardcoded value as a fallback only.</p>
+<p>Anything the external platform can be <em>asked</em> should not be assumed, and heterogeneous
+item classes are exactly where an assumption that held for months stops holding.</p>
+<h3 id="dry-run-is-a-mode-not-a-flag-someone-remembers-to-pass">16.4 Dry-run is a mode, not a flag someone remembers to pass<a class="headerlink" href="#dry-run-is-a-mode-not-a-flag-someone-remembers-to-pass" title="Link to this section">#</a></h3>
+<p>Anything whose side effects are irreversible needs a mode in which the entire pipeline
+runs, all gates evaluate, all decisions are logged, and only the final call is
+suppressed. That mode is also the only honest way to test the gates: a gate that has
+never refused anything in a real run is untested.</p>
+<h3 id="secrets-discipline-and-a-static-analyser-earn-their-place-here-specifically">16.5 Secrets discipline and a static analyser earn their place here specifically<a class="headerlink" href="#secrets-discipline-and-a-static-analyser-earn-their-place-here-specifically" title="Link to this section">#</a></h3>
+<p><code>.env</code> handling and a security linter (<code>bandit</code>) are ordinary hygiene in most projects
+and load-bearing in this one, because the process holds live credentials for a
+third-party execution platform. The general rule: <strong>the cost of a leak, not the size of
+the codebase, sets how much hygiene a repository deserves.</strong></p>
+<h2 id="performance-engineering-making-a-search-space-affordable">17 — Performance engineering: making a search space affordable<a class="headerlink" href="#performance-engineering-making-a-search-space-affordable" title="Link to this section">#</a></h2>
+<h3 id="130m-evaluations-in-235-seconds-and-two-artefacts-that-disagree-about-it">17.1 130M evaluations in ~235 seconds — and two artefacts that disagree about it<a class="headerlink" href="#130m-evaluations-in-235-seconds-and-two-artefacts-that-disagree-about-it" title="Link to this section">#</a></h3>
+<p>The harness scanned <strong>203 input series × 17 candidate rule types × ~28,800 parameter
+combinations</strong>, over 50,000 rows per series (~10.15M rows total). Its own <code>learnings.md</code>
+records the full run at <strong>~235 seconds on 10 of 12 cores — about 23,500 evaluations per
+second.</strong></p>
+<p>A separately recorded note puts the same full run at <strong>about 5 hours</strong>. Both figures are
+written down; they differ by ~75×. I cannot resolve which run each describes, so both are
+kept here and neither should be quoted alone.</p>
+<blockquote>
+<p><strong>This is the §12 problem inside my own source material.</strong> Two artefacts recorded a
+measurement for the same job and nobody reconciled them, so the <em>number</em> is now
+unusable while the <em>engineering</em> remains fully citable. A measurement without a
+recorded run identity decays into folklore.</p>
+</blockquote>
+<p>The composition of the speedup is documented and does not depend on the total:</p>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>compiling the hot path</td>
+<td>~100× vs interpreted loops</td>
+</tr>
+<tr>
+<td>process-level parallelism</td>
+<td>~10×, near-linear on 10 workers</td>
+</tr>
+<tr>
+<td>pruning invalid parameter combinations</td>
+<td>~27 % fewer evaluations</td>
+</tr>
+<tr>
+<td>skipping input/rule pairs that produce no events</td>
+<td>~30 % of pairs never entered</td>
+</tr>
+<tr>
+<td>validating only the best candidate per pair</td>
+<td>~95 % fewer validation runs</td>
+</tr>
+</tbody>
+</table>
+<h3 id="measure-first-then-replace-the-hot-path-not-the-other-way-round">17.2 Measure first, then replace the hot path — not the other way round<a class="headerlink" href="#measure-first-then-replace-the-hot-path-not-the-other-way-round" title="Link to this section">#</a></h3>
+<p>The productive sequence was: run it, find where the time actually goes, and replace only
+those functions with JIT-compiled (Numba) and vectorized equivalents. The instinct to
+JIT-compile everything is worse than useless: compilation has its own cost, and
+<code>nopython</code> mode rejects exactly the loosely-typed convenience code that most of a
+research harness is made of.</p>
+<h3 id="the-unit-of-optimization-is-per-evaluation-cost-number-of-evaluations">17.3 The unit of optimization is "per-evaluation cost × number of evaluations"<a class="headerlink" href="#the-unit-of-optimization-is-per-evaluation-cost-number-of-evaluations" title="Link to this section">#</a></h3>
+<p>At 130M evaluations, a saving of 100 microseconds per evaluation is about <strong>3.6 hours</strong>.
+That multiplication is the whole reason a research harness rewards optimization work
+that would be premature anywhere else: nothing in a request/response service has a
+multiplier like that.</p>
+<h3 id="interpreted-language-loops-are-the-thing-being-removed-not-the-thing-being-sped-up">17.4 Interpreted-language loops are the thing being removed, not the thing being sped up<a class="headerlink" href="#interpreted-language-loops-are-the-thing-being-removed-not-the-thing-being-sped-up" title="Link to this section">#</a></h3>
+<p>The gain came from <em>removing</em> per-element interpretation — expressing the evaluation over
+whole arrays, or compiling the loop down — rather than from micro-tuning the loop body.
+Vectorization and JIT are two routes to the same destination; which one wins depends on
+whether the operation is expressible as array algebra at all.</p>
+<h3 id="ai-assisted-code-human-optimization-strategy">17.5 AI-assisted code, human optimization strategy<a class="headerlink" href="#ai-assisted-code-human-optimization-strategy" title="Link to this section">#</a></h3>
+<p>The codebase was largely model-generated. The part that was genuinely engineered was the
+<em>strategy</em>: deciding what to measure, choosing which hot paths to replace, and judging
+when the runtime was good enough to stop. That split is worth naming honestly, and it is
+the same split that shows up across every project in this document.</p>
+<h3 id="one-compiled-call-per-batch-not-per-item-the-boundary-is-the-cost">17.6 One compiled call per batch, not per item — the boundary is the cost<a class="headerlink" href="#one-compiled-call-per-batch-not-per-item-the-boundary-is-the-cost" title="Link to this section">#</a></h3>
+<p>The naive structure calls the compiled kernel once per parameter combination from the
+interpreter. At roughly a microsecond of call overhead and millions of combinations,
+<strong>the boundary crossings alone cost seconds</strong> before any work happens.</p>
+<p>The rewrite moved the entire parameter grid — eight nested loops — <em>inside</em> one compiled
+function, which calls the kernel from compiled code. The overhead is then paid once per
+input/rule pair (thousands of times) instead of once per combination (millions).</p>
+<blockquote>
+<p><strong>The single most impactful decision in the whole harness: never leave compiled code
+inside the inner loop.</strong> Everything else — parallelism, caching, pruning — stacks on
+top of that and none of it substitutes for it.</p>
+</blockquote>
+<h3 id="persist-the-compiled-artefacts-or-pay-warm-up-on-every-run">17.7 Persist the compiled artefacts, or pay warm-up on every run<a class="headerlink" href="#persist-the-compiled-artefacts-or-pay-warm-up-on-every-run" title="Link to this section">#</a></h3>
+<p>Compilation is cached to disk, so the first run pays ~10 s and every later run starts
+immediately. For a tool that is re-run dozens of times a day during research, warm-up
+cost is not a one-off — it is a per-run tax that a single flag removes.</p>
+<h3 id="keep-dtypes-stable-or-the-compiler-silently-builds-a-second-version">17.8 Keep dtypes stable, or the compiler silently builds a second version<a class="headerlink" href="#keep-dtypes-stable-or-the-compiler-silently-builds-a-second-version" title="Link to this section">#</a></h3>
+<p>Compilation is specialised per input type. Passing 32-bit floats on one call and 64-bit
+on another triggers a <strong>second compilation</strong>, doubling warm-up for no reason. Every array
+is therefore cast explicitly at the boundary, once, on load.</p>
+<p>This is the quiet one: nothing fails, nothing warns, the run is just slower than the last
+one and nobody knows why.</p>
+<h3 id="compute-shared-intermediates-once-not-once-per-consumer">17.9 Compute shared intermediates once, not once per consumer<a class="headerlink" href="#compute-shared-intermediates-once-not-once-per-consumer" title="Link to this section">#</a></h3>
+<p>Twelve derived series feed seventeen candidate rule types. Computing them per rule type
+means <strong>17× redundant work</strong> over 50,000 rows per input series. One pass producing all
+twelve, shared across the consumers, saved roughly 16× on that stage.</p>
+<p>The general shape: whenever N consumers each derive the same intermediate from the same
+source, the intermediate belongs to the source.</p>
+<h3 id="processes-not-threads-for-cpu-bound-work-and-leave-cores-for-the-machine">17.10 Processes, not threads, for CPU-bound work — and leave cores for the machine<a class="headerlink" href="#processes-not-threads-for-cpu-bound-work-and-leave-cores-for-the-machine" title="Link to this section">#</a></h3>
+<p>Interpreted-language threading cannot parallelise CPU-bound work under a global lock;
+separate OS processes can, and scaled near-linearly across 10 workers. The worker count
+is <code>cpu_count() - 2</code>, deliberately: saturating every core makes the machine unresponsive
+and the monitoring that tells you the run is healthy is the first thing to starve.</p>
+<h3 id="cache-the-inputs-on-disk-and-cast-them-on-the-way-in">17.11 Cache the inputs on disk, and cast them on the way in<a class="headerlink" href="#cache-the-inputs-on-disk-and-cast-them-on-the-way-in" title="Link to this section">#</a></h3>
+<p>Fetching 50,000 rows per input series from the external platform took 5–30 s each —
+up to ~100 minutes for 203 series. Cached to local files, load time is under 0.1 s. The
+same load function does the dtype cast from §17.8, so the guarantee is established once
+at the only place data enters the system.</p>
+<h3 id="four-ways-to-not-do-the-work-at-all">17.12 Four ways to not do the work at all<a class="headerlink" href="#four-ways-to-not-do-the-work-at-all" title="Link to this section">#</a></h3>
+<p>The cheapest evaluation is the one that never runs. Four separate skips, each inside the
+compiled loop where the check is nearly free:</p>
+<table>
+<thead>
+<tr>
+<th>Skip</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>parameter combinations that are invalid by definition</td>
+<td>~27 % fewer</td>
+</tr>
+<tr>
+<td>input/rule pairs that produce <strong>zero</strong> events</td>
+<td>~30 % of pairs never entered</td>
+</tr>
+<tr>
+<td>results below a <strong>minimum sample count</strong> (3)</td>
+<td>discarded before allocating</td>
+</tr>
+<tr>
+<td>expensive validation on anything but the best candidate</td>
+<td>~95 % fewer validation runs</td>
+</tr>
+</tbody>
+</table>
+<p>Two are pure performance. The other two are <em>also</em> correctness: a result from one or two
+samples is statistically meaningless, and letting it into the ranking is how a single
+lucky outcome ends up looking like a discovery.</p>
+<h2 id="validating-a-search-over-many-candidates-without-fooling-yourself">18 — Validating a search over many candidates without fooling yourself<a class="headerlink" href="#validating-a-search-over-many-candidates-without-fooling-yourself" title="Link to this section">#</a></h2>
+<h3 id="searching-130m-candidates-means-the-best-result-is-mostly-luck">18.1 Searching 130M candidates means the best result is mostly luck<a class="headerlink" href="#searching-130m-candidates-means-the-best-result-is-mostly-luck" title="Link to this section">#</a></h3>
+<p>Any large parameter sweep will produce a spectacular top result whether or not the
+underlying idea works, because the search itself is a selection process. This is the
+same failure the retrieval work hit from a different direction (§6): a number that
+looks great is a reason to audit the process that produced it, not to celebrate.</p>
+<h3 id="walk-forward-validation-because-a-single-split-is-one-sample">18.2 Walk-forward validation, because a single split is one sample<a class="headerlink" href="#walk-forward-validation-because-a-single-split-is-one-sample" title="Link to this section">#</a></h3>
+<p>Fitting on one period and evaluating on the next, then rolling both windows forward,
+turns a single pass/fail into a distribution over many out-of-sample periods. A
+candidate that survives one split has an n of 1 — precisely the problem that made a set
+of social-media engagement figures uninterpretable elsewhere in this work.</p>
+<h3 id="a-two-stage-promotion-gate-separates-interesting-from-trusted">18.3 A two-stage promotion gate separates "interesting" from "trusted"<a class="headerlink" href="#a-two-stage-promotion-gate-separates-interesting-from-trusted" title="Link to this section">#</a></h3>
+<p>Candidates were promoted in two stages rather than one: a cheap composite score ranked
+the full space, and only survivors faced the expensive validation. This is the same
+economics as verification in the agent work (§5): the cheap stage scales with the number
+of <em>candidates</em>, the expensive stage with the number that <em>survived</em>, so the gate between
+them is where the budget is actually decided.</p>
+<h3 id="monte-carlo-answers-the-question-a-single-average-cannot">18.4 Monte Carlo answers the question a single average cannot<a class="headerlink" href="#monte-carlo-answers-the-question-a-single-average-cannot" title="Link to this section">#</a></h3>
+<p>Reordering outcomes randomly across many simulated runs gives the <em>distribution</em> of
+worst cases rather than one historical path. An average result hides whether an early bad
+streak would have ended the run before the good part arrived — and a candidate that cannot
+survive its own worst ordering is not viable regardless of its mean.</p>
+<h3 id="a-composite-score-is-a-set-of-weights-and-the-weights-are-the-model">18.5 A composite score is a set of weights, and the weights are the model<a class="headerlink" href="#a-composite-score-is-a-set-of-weights-and-the-weights-are-the-model" title="Link to this section">#</a></h3>
+<p>Ranking candidates by one blended number is convenient and quietly encodes a value
+judgement about how much upside is worth how much worst-case loss. The score is not an
+objective measurement; it is a hypothesis, and it should be as easy to change and re-run
+as any other parameter.</p>
+<h3 id="discard-below-a-minimum-sample-count-before-it-can-win">18.6 Discard below a minimum sample count, before it can win<a class="headerlink" href="#discard-below-a-minimum-sample-count-before-it-can-win" title="Link to this section">#</a></h3>
+<p>Any candidate producing fewer than three observations is dropped inside the evaluation
+kernel — not filtered later. With millions of candidates, <em>something</em> will produce a
+single spectacular observation, and a ranking that admits it will put it on top.</p>
+<p>The threshold is the cheapest defence against selection noise there is, and placing it
+before result storage means the noise never reaches the sort.</p>
+<h3 id="a-composite-score-is-a-product-of-penalties-and-every-factor-is-a-value-judgement">18.7 A composite score is a product of penalties, and every factor is a value judgement<a class="headerlink" href="#a-composite-score-is-a-product-of-penalties-and-every-factor-is-a-value-judgement" title="Link to this section">#</a></h3>
+<p>The ranking multiplies an out-of-sample success rate by <code>(1 − risk-of-ruin)</code>, by
+<code>(1 − mean worst-case loss)</code>, by a sample-confidence factor and by a window-confidence
+factor. The <em>multiplicative</em> form is the interesting part: any factor near zero
+annihilates the score, so a candidate cannot buy its way to the top on one strong
+dimension.</p>
+<p>That is a deliberate policy, not a measurement — and worth restating from §18.5: the
+weights and the functional form <em>are</em> the hypothesis. They should be as easy to change
+and re-run as any parameter.</p>
+<h3 id="model-the-degradation-explicitly-then-require-survival-under-the-pessimistic-case">18.8 Model the degradation explicitly, then require survival under the pessimistic case<a class="headerlink" href="#model-the-degradation-explicitly-then-require-survival-under-the-pessimistic-case" title="Link to this section">#</a></h3>
+<p>Idealised evaluation always flatters. A dedicated model applies slippage, spread widening
+under volatility, fill probability, latency delay and per-side fees, in five named
+scenarios from "ideal" to "worst case".</p>
+<blockquote>
+<p><strong>The decision rule is the point: a candidate that only survives the ideal scenario is
+rejected.</strong> Bracketing the realistic range turns "it looked good offline" into a
+statement with a floor.</p>
+</blockquote>
+<p>Fill probability is the parameter people forget — 5 % of actions missed under normal
+conditions and 20 % under fast ones is not a rounding error, and an offline harness
+assumes 100 % by default.</p>
+<h3 id="classify-the-conditions-then-ask-where-the-candidate-fails">18.9 Classify the conditions, then ask where the candidate fails<a class="headerlink" href="#classify-the-conditions-then-ask-where-the-candidate-fails" title="Link to this section">#</a></h3>
+<p>Inputs are classified into five regimes — two directional, one range-bound, one
+high-variance, one low-variance — and per-regime success rates are computed separately.</p>
+<p>A candidate with a 60 % overall success rate can be 90 % in one regime and 20 % in
+another. The aggregate hides both facts, and only the split tells you whether the answer
+is "reject it" or "gate it to the regime where it works". Aggregate metrics describe a
+mixture; they do not describe any of its components.</p>
+<h3 id="monte-carlo-with-costs-not-monte-carlo-with-hope">18.10 Monte Carlo with costs, not Monte Carlo with hope<a class="headerlink" href="#monte-carlo-with-costs-not-monte-carlo-with-hope" title="Link to this section">#</a></h3>
+<p>10,000 simulations reorder outcomes randomly <em>with</em> slippage, spread, fees and an
+adverse-fill percentage applied, producing probabilities rather than a point estimate.
+Running the same simulation on frictionless outcomes is the common version and it answers
+a question nobody has: performance typically degrades 30–50 % once costs are in, so a
+cost-free distribution is not a conservative estimate — it is a different system.</p>
+<h3 id="estimate-the-cost-parameter-from-the-data-instead-of-assuming-one">18.11 Estimate the cost parameter from the data instead of assuming one<a class="headerlink" href="#estimate-the-cost-parameter-from-the-data-instead-of-assuming-one" title="Link to this section">#</a></h3>
+<p>Rather than a fixed cost assumption across all inputs, the typical cost per input series
+is estimated from that series' own dispersion on calm rows. A single global constant
+overestimates cost for the most liquid inputs and underestimates it for the thinnest —
+i.e. it is wrong in both directions at once, which is worse than being uniformly
+pessimistic, because it reorders the ranking.</p>
+<h3 id="trigger-on-the-transition-not-on-the-state">18.12 Trigger on the transition, not on the state<a class="headerlink" href="#trigger-on-the-transition-not-on-the-state" title="Link to this section">#</a></h3>
+<p>A condition that stays true for twenty consecutive rows generates twenty events if the
+rule tests the <em>state</em>, and one if it tests the <em>edge</em> — current row past the threshold,
+previous row not. Twenty events means twenty entries into what is actually one
+occurrence.</p>
+<p>The same bug shape appears far outside this domain: alerting that re-fires while a
+threshold remains breached, a watcher that re-processes an unchanged file, a retry loop
+that treats "still failing" as "failed again".</p>
+<h2 id="reproducible-environments-as-a-correctness-property">19 — Reproducible environments as a correctness property<a class="headerlink" href="#reproducible-environments-as-a-correctness-property" title="Link to this section">#</a></h2>
+<h3 id="containerizing-an-existing-pipeline-exposed-two-invisible-dependencies">19.1 Containerizing an existing pipeline exposed two invisible dependencies<a class="headerlink" href="#containerizing-an-existing-pipeline-exposed-two-invisible-dependencies" title="Link to this section">#</a></h3>
+<p>Moving a working local pipeline into a container revealed two binaries it had always
+needed and never declared — <code>poppler-utils</code> for PDF text extraction, and <code>git</code>, which was
+being called to stamp the environment into each output. Both merely happened to exist on
+the host. Nothing was broken before the move; the dependency list was simply <strong>wrong in a
+way that only a fresh environment can reveal.</strong></p>
+<h3 id="an-install-check-that-synthesizes-one-real-unit-beats-a-version-list">19.2 An install-check that synthesizes one real unit beats a version list<a class="headerlink" href="#an-install-check-that-synthesizes-one-real-unit-beats-a-version-list" title="Link to this section">#</a></h3>
+<p>The check that replaced "hope it works" does four things: verifies package versions,
+asserts the ML framework is the CPU build (a CUDA build on a CPU-only machine installs
+and then fails at runtime), confirms the media tool is present, and then <strong>runs one real
+paragraph through the model, reads it back, and reports this machine's real-time factor.</strong>
+A version list proves the environment installed. Producing one real output proves it
+works, and gives you the machine's speed as a by-product.</p>
+<h3 id="a-measurement-carries-its-environment-with-it">19.3 A measurement carries its environment with it<a class="headerlink" href="#a-measurement-carries-its-environment-with-it" title="Link to this section">#</a></h3>
+<p>The container shipped <code>ffmpeg</code> 7.1 while the loudness targets had been measured against
+6.1 — and two-pass loudness normalization changed behaviour in 7. The recorded rule is
+therefore not a number but a procedure: <strong>re-measure one chapter before trusting a full
+run.</strong> Any measurement that depends on a tool version needs that version written next to
+it, or it silently becomes a guess.</p>
+<h3 id="host-uid-gid-in-the-image-or-every-output-file-is-root-owned">19.4 Host UID/GID in the image, or every output file is root-owned<a class="headerlink" href="#host-uid-gid-in-the-image-or-every-output-file-is-root-owned" title="Link to this section">#</a></h3>
+<p>Building the container user from <code>HOST_UID</code>/<code>HOST_GID</code> is a two-line change that decides
+whether the pipeline's output is usable without <code>sudo</code>. Model weights went on a volume
+rather than into the image for the related reason: an image that carries gigabytes of
+weights is rebuilt slowly and often for no benefit.</p>
+<h3 id="nothing-is-installed-on-the-host-any-more-is-the-actual-goal">19.5 "Nothing is installed on the host any more" is the actual goal<a class="headerlink" href="#nothing-is-installed-on-the-host-any-more-is-the-actual-goal" title="Link to this section">#</a></h3>
+<p>The end state worth aiming for is not "it runs in Docker too" but that the host has no
+project-specific installation at all. Only then is the declared environment the <em>real</em>
+environment, and only then does §19.1 stop recurring.</p>
+<h2 id="legacy-systems-bridging-modernizing-and-what-git-history-hides">20 — Legacy systems: bridging, modernizing, and what git history hides<a class="headerlink" href="#legacy-systems-bridging-modernizing-and-what-git-history-hides" title="Link to this section">#</a></h2>
+<h3 id="git-history-lied-about-the-project-s-age-by-thirteen-years">20.1 Git history lied about the project's age by thirteen years<a class="headerlink" href="#git-history-lied-about-the-project-s-age-by-thirteen-years" title="Link to this section">#</a></h3>
+<p>A long-running codebase showed a first commit in October 2022. The project started in
+2009 — 2022 is when it was migrated from SVN to git. Any tool or agent that derives
+"project start" from <code>git log</code> gets this wrong, confidently. The same class of error as
+§12: the artefact records when the <em>repository</em> began, not when the <em>work</em> did.</p>
+<h3 id="a-legacy-tree-that-still-exists-is-a-feature-of-the-honest-description">20.2 A <code>legacy/</code> tree that still exists is a feature of the honest description<a class="headerlink" href="#a-legacy-tree-that-still-exists-is-a-feature-of-the-honest-description" title="Link to this section">#</a></h3>
+<p>The modernization onto a current framework and ORM is real and incomplete: a <code>legacy/</code>
+tree remains alongside it. Describing the stack as simply "modern framework" would be
+false; the truthful and more interesting statement is that two eras coexist in one
+codebase and the boundary between them is where the work happens.</p>
+<h3 id="automated-refactoring-tools-are-for-mechanical-migrations-only">20.3 Automated refactoring tools are for mechanical migrations only<a class="headerlink" href="#automated-refactoring-tools-are-for-mechanical-migrations-only" title="Link to this section">#</a></h3>
+<p>A rules-based refactoring tool plus a formatter handle the mechanical part of a
+migration — signature changes, deprecated call sites, syntax modernization — across
+hundreds of files far more reliably than a human or a model editing by hand. What they
+cannot do is the part that matters: deciding which domain concept the legacy code was
+actually expressing.</p>
+<h3 id="a-database-heavy-domain-resists-the-tidy-version-of-modernization">20.4 A database-heavy domain resists the tidy version of modernization<a class="headerlink" href="#a-database-heavy-domain-resists-the-tidy-version-of-modernization" title="Link to this section">#</a></h3>
+<p>152 SQL files and a migration history are not incidental to the domain; they <em>are</em> the
+domain. Modernizing the application layer while the schema keeps its historically-grown
+shape is the realistic path, and it means the ORM mapping carries the compromises rather
+than hiding them.</p>
+<h3 id="bridging-a-modern-spa-into-a-legacy-cms-the-asset-filenames-are-the-hard-part">20.5 Bridging a modern SPA into a legacy CMS: the asset filenames are the hard part<a class="headerlink" href="#bridging-a-modern-spa-into-a-legacy-cms-the-asset-filenames-are-the-hard-part" title="Link to this section">#</a></h3>
+<p>Embedding a modern typed SPA into a legacy PHP CMS via a shortcode and an editor button
+was straightforward except for one thing: the build tool emits <strong>content-hashed
+filenames</strong>, and the CMS wants to register a static asset path. The working answer was
+dynamic asset registration — read the build manifest at runtime instead of hard-coding a
+filename that changes on every build. Any hard-coded hashed filename is a bug with a
+delayed fuse.</p>
+<h3 id="a-typed-api-call-base-component-pays-for-itself-at-the-third-endpoint">20.6 A typed API-call base component pays for itself at the third endpoint<a class="headerlink" href="#a-typed-api-call-base-component-pays-for-itself-at-the-third-endpoint" title="Link to this section">#</a></h3>
+<p>The SPA fetched several resource types through one REST API. A single generic, typed
+call component gave every endpoint the same error handling, loading state and response
+contract. Written for one endpoint it looks like over-engineering; by the third it is
+the only reason the code is still readable.</p>
+<h3 id="reproducible-local-dev-via-lifecycle-hooks-not-a-readme-section">20.7 Reproducible local dev via lifecycle hooks, not a README section<a class="headerlink" href="#reproducible-local-dev-via-lifecycle-hooks-not-a-readme-section" title="Link to this section">#</a></h3>
+<p>Database export/import wired into the local environment's pre-stop and post-start hooks
+means the state travels with the environment automatically. Every instruction in a README
+that a developer must remember to run is a step that will eventually be skipped.</p>
+<h2 id="framework-level-architecture-that-held-up">21 — Framework-level architecture that held up<a class="headerlink" href="#framework-level-architecture-that-held-up" title="Link to this section">#</a></h2>
+<h3 id="interface-first-service-layers-arrived-at-by-refactoring-rather-than-up-front">21.1 Interface-first service layers, arrived at by refactoring rather than up front<a class="headerlink" href="#interface-first-service-layers-arrived-at-by-refactoring-rather-than-up-front" title="Link to this section">#</a></h3>
+<p>An authentication and import feature ended up as interfaces (<code>AuthenticationInterface</code>,
+<code>FileHandlerInterface</code>) with concrete token-auth, session-auth and import services behind
+them. The order matters: the interfaces were <strong>extracted</strong> by moving logic out of
+controllers, not designed before the logic existed. The abstraction was therefore shaped
+by two real implementations rather than by a guess about the second one.</p>
+<h3 id="two-authentication-models-in-one-application-is-a-legitimate-design-not-indecision">21.2 Two authentication models in one application is a legitimate design, not indecision<a class="headerlink" href="#two-authentication-models-in-one-application-is-a-legitimate-design-not-indecision" title="Link to this section">#</a></h3>
+<p>Token-based auth for a JSON API and session-based auth for a web login coexist because
+they answer different questions — one has no server-side session to speak of, the other
+does. Separate API and web controllers, and separate middleware, keeps the two from
+leaking into each other.</p>
+<h3 id="custom-middleware-is-the-right-place-for-a-cross-cutting-check">21.3 Custom middleware is the right place for a cross-cutting check<a class="headerlink" href="#custom-middleware-is-the-right-place-for-a-cross-cutting-check" title="Link to this section">#</a></h3>
+<p>A token check belongs in middleware, not at the top of every controller action. The test
+of whether something is middleware: would forgetting it in one place be a security bug?
+If yes, it must not be something a developer can forget.</p>
+<h3 id="phpunit-is-configured-is-not-there-are-tests">21.4 "PHPUnit is configured" is not "there are tests"<a class="headerlink" href="#phpunit-is-configured-is-not-there-are-tests" title="Link to this section">#</a></h3>
+<p>One repository carries a full test-runner configuration and only the framework's default
+stubs; its README lists "add automated tests" as an open item. A configured runner
+produces a green run over nothing at all — the metric worth reporting is what is
+<em>asserted</em>, never that the suite passes.</p>
+<h3 id="working-inside-an-existing-open-source-package-teaches-internals-nothing-else-does">21.5 Working inside an existing open-source package teaches internals nothing else does<a class="headerlink" href="#working-inside-an-existing-open-source-package-teaches-internals-nothing-else-does" title="Link to this section">#</a></h3>
+<p>Adding custom IDs and timestamps to pivot-table events in an existing package meant
+reading the ORM's relationship internals — how many-to-many and polymorphic relations
+dispatch model events — rather than reading its documentation. It is one focused commit
+on top of ~187 upstream ones, and describing it as "contributed a feature to an existing
+package" rather than "built a package" is the difference between a true claim and a
+false one.</p>
+<h3 id="one-time-provisioning-needs-an-idempotency-flag-and-a-hook-that-cannot-be-disabled">21.6 One-time provisioning needs an idempotency flag and a hook that cannot be disabled<a class="headerlink" href="#one-time-provisioning-needs-an-idempotency-flag-and-a-hook-that-cannot-be-disabled" title="Link to this section">#</a></h3>
+<p>Automated environment setup ran in a CMS with no first-boot hook of its own. It was
+placed in the directory whose contents load unconditionally and cannot be deactivated
+through the admin UI — the right choice for provisioning code, which must run even if
+someone disables everything else.</p>
+<p>The correctness detail is the stored completion flag: the routine checks it, runs once,
+and sets it. Provisioning that runs on <em>every</em> request because nobody recorded that it
+already ran is a self-inflicted outage, and the flag is one option row.</p>
+<h3 id="a-67-line-parser-with-a-type-mismatch-nothing-would-catch">21.7 A 67-line parser with a type mismatch nothing would catch<a class="headerlink" href="#a-67-line-parser-with-a-type-mismatch-nothing-would-catch" title="Link to this section">#</a></h3>
+<p>A small refactoring case study — one class, 67 lines, turning a supplier record into a
+canonical one — contains a bug worth more than its size. The category lookup casts the
+group field to an integer:</p>
+<pre><code class="language-php">$category = $this-&gt;getCategory((int) $product['groupId']);
+</code></pre>
+<p>and a later branch compares the same field to a <strong>string</strong>:</p>
+<pre><code class="language-php">if (str_ends_with($product['number'], '_X') || $product['groupId'] === '12') {
+</code></pre>
+<p>With strict comparison, one of those two is always wrong: if the field arrives as an
+integer the branch never fires, and if it arrives as a string the cast is silently
+covering for it. The record still parses. Nothing throws. One classification is just
+quietly never assigned.</p>
+<blockquote>
+<p><strong>The lesson is about where types are asserted.</strong> Both lines are defensible in
+isolation; the defect exists only in the <em>relationship</em> between them, which is exactly
+what a reviewer scanning a 67-line file does not check. A typed value object at the
+boundary makes the question unaskable — and the same class of defect is what §12's
+grounding rules are for in text: coercion at the point of use hides the disagreement
+instead of surfacing it.</p>
+</blockquote>
+<h2 id="migrating-a-legacy-codebase-while-it-stays-online">22 — Migrating a legacy codebase while it stays online<a class="headerlink" href="#migrating-a-legacy-codebase-while-it-stays-online" title="Link to this section">#</a></h2>
+<p>Everything in this section is measured from one long-running community codebase (I),
+mid-migration from a historically-grown structure onto a modern framework and ORM.</p>
+<h3 id="a-2-665-line-entry-point-became-a-27-line-redirect-shim">22.1 A 2,665-line entry point became a 27-line redirect shim<a class="headerlink" href="#a-2-665-line-entry-point-became-a-27-line-redirect-shim" title="Link to this section">#</a></h3>
+<p>The obvious move when replacing a legacy entry point is to delete it. That breaks the
+site, because <strong>the old URLs are inside the content</strong>: years of user-written posts link
+to the old file with its old query string. What shipped instead was the old path kept as
+a shim that parses the legacy query parameters, maps them onto the new route and issues a
+<code>301</code>. Two files went from <strong>2,665 and 2,101 lines to about 26 each</strong> — a 4,717-line
+deletion in one commit, with no dead links.</p>
+<blockquote>
+<p><strong>The lesson generalises past URLs: a migration is not finished when the code moves.
+It is finished when everything that <em>points at</em> the old shape still resolves</strong> — and
+persisted user data is the pointer you cannot edit.</p>
+</blockquote>
+<h3 id="one-new-route-several-legacy-parameter-names">22.2 One new route, several legacy parameter names<a class="headerlink" href="#one-new-route-several-legacy-parameter-names" title="Link to this section">#</a></h3>
+<p>The shim maps two <em>different</em> legacy query parameters onto the same new path, because the
+old entry point had accumulated more than one name for the same identifier over the
+years. Reading the legacy call sites was the only way to find that out; the new route
+would have looked correct and quietly 404'd for one of the two.</p>
+<p>It also validates the parameter (<code>is_numeric</code>, then an integer cast) before building the
+redirect target — a shim is still a public entry point.</p>
+<h3 id="five-near-identical-subsystems-one-shared-base-and-the-honest-limit">22.3 Five near-identical subsystems, one shared base — and the honest limit<a class="headerlink" href="#five-near-identical-subsystems-one-shared-base-and-the-honest-limit" title="Link to this section">#</a></h3>
+<p>Five parallel discussion subsystems had each grown their own copy of the same logic. The
+migration pulled the shared behaviour into one abstract controller and rebuilt the five
+as subclasses. The numbers are the interesting part:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Lines</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>shared abstract base</td>
+<td>161</td>
+</tr>
+<tr>
+<td>the five subclasses</td>
+<td>655, 669, 767, 796, 982</td>
+</tr>
+</tbody>
+</table>
+<p>So the shared base is <strong>small relative to what remains per subsystem</strong>. Duplication was
+reduced, not eliminated — and calling that "unified" would overstate it. A refactoring
+that leaves 80 % of the volume in the subclasses has still bought the thing that
+mattered: one place to change the behaviour that is genuinely common, and a diff between
+subsystems that is now readable.</p>
+<p>The related small win from the same pass: all five were made to order records
+consistently. Divergent behaviour across near-identical subsystems is a bug that nobody
+reports because each one looks fine on its own.</p>
+<h3 id="automated-refactoring-is-run-as-a-ratchet-not-once">22.4 Automated refactoring is run as a ratchet, not once<a class="headerlink" href="#automated-refactoring-is-run-as-a-ratchet-not-once" title="Link to this section">#</a></h3>
+<p>The refactoring tool's configuration is the most instructive file in the repository. It
+targets <strong>PHP 7.0 rules on a codebase running 8.2</strong>, and sets dead-code and type-coverage
+levels to <strong>0</strong>:</p>
+<ul>
+<li>the <em>language</em> floor is raised in stages, so each run produces a reviewable diff rather than one unmergeable rewrite;</li>
+<li>levels start at 0 and are incremented deliberately — a ratchet, so the codebase can only get cleaner;</li>
+<li>vendored third-party legacy is explicitly skipped, because rewriting code you do not own creates a merge conflict with every future update;</li>
+<li>it runs in parallel over eleven paths, including both the modern tree <em>and</em> the legacy one.</li>
+</ul>
+<p>This is the counterpoint to §20.3: the tool is genuinely for mechanical work, and the
+<em>engineering</em> is in the staging policy around it.</p>
+<h3 id="a-committed-env-is-not-automatically-a-leak">22.5 A committed <code>.env</code> is not automatically a leak<a class="headerlink" href="#a-committed-env-is-not-automatically-a-leak" title="Link to this section">#</a></h3>
+<p>The repository tracks <code>.env</code>, <code>.env.dev</code> and <code>.env.test</code>, which looks like the classic
+finding — and is not one. The framework's convention is that committed files hold
+<strong>defaults</strong>, uncommitted <code>.local</code> files hold overrides, and real environment variables
+win over both; the tracked file says so in its own header. The general rule worth keeping:
+<strong>"is a secret file committed" is the wrong question. "Does this file contain a secret"
+is the right one</strong> — and only one of the two can be answered by a filename check, which is
+why an automated hygiene gate needs the second check as well.</p>
+<h3 id="the-un-migrated-tail-is-visible-in-the-repository-root-and-that-is-honest">22.6 The un-migrated tail is visible in the repository root, and that is honest<a class="headerlink" href="#the-un-migrated-tail-is-visible-in-the-repository-root-and-that-is-honest" title="Link to this section">#</a></h3>
+<p>Eighteen loose legacy PHP files still sit at the top level, next to a modern <code>src/</code>
+(67 files), a <code>legacy/</code> tree (54) and a real test suite (20 test classes plus integration
+fixtures). An in-progress migration looks like this. The alternative — hiding the
+remainder in a directory named to suggest it is finished — costs the one thing the
+structure is currently giving every contributor for free: an accurate map of what has
+been done.</p>
+<h2 id="working-method-the-parts-that-turned-out-to-matter">23 — Working method: the parts that turned out to matter<a class="headerlink" href="#working-method-the-parts-that-turned-out-to-matter" title="Link to this section">#</a></h2>
 <p>Distilled, because these are the ones that changed outcomes repeatedly.</p>
 <p><strong>On measuring</strong></p>
 <ul>
@@ -2365,7 +3002,7 @@ pretend to measure it.</strong></p>
   instrument.</li>
 </ul>
 <hr>
-<h2 id="open-problems-honestly-labelled">16 — Open problems, honestly labelled<a class="headerlink" href="#open-problems-honestly-labelled" title="Link to this section">#</a></h2>
+<h2 id="open-problems-honestly-labelled">24 — Open problems, honestly labelled<a class="headerlink" href="#open-problems-honestly-labelled" title="Link to this section">#</a></h2>
 <p>Kept because a known-unclosed risk is more useful than a tidy list.</p>
 <ul>
 <li><strong>A fix site missing from the worklist entirely is invisible to every later stage</strong> —
