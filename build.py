@@ -31,6 +31,10 @@ ASSETS = ROOT / "assets"
 
 SITE_TITLE = "Engineering notes"
 SITE_TAGLINE = "Measured findings from building with LLMs, agents and retrieval."
+# Absolute, because Open Graph consumers do not resolve relative URLs. Update
+# both if a custom domain is added.
+SITE_URL = "https://jackylyn1.github.io/notes/"
+OG_IMAGE = SITE_URL + "assets/og.png"
 
 
 @dataclass(frozen=True)
@@ -76,7 +80,14 @@ def slugify(text: str, separator: str = "-") -> str:
 def render_markdown(text: str) -> tuple[str, str]:
     """Return (body_html, toc_html)."""
     md = markdown.Markdown(
-        extensions=["toc", "tables", "fenced_code", "attr_list", "sane_lists", "footnotes"],
+        extensions=[
+            "toc",
+            "tables",
+            "fenced_code",
+            "attr_list",
+            "sane_lists",
+            "footnotes",
+        ],
         extension_configs={
             "toc": {
                 "toc_depth": "2-2",  # top-level sections only; the page is long enough
@@ -103,6 +114,13 @@ TEMPLATE = """<!doctype html>
 <meta property="og:title" content="{title}">
 <meta property="og:description" content="{description}">
 <meta property="og:type" content="article">
+<meta property="og:url" content="{site_url}">
+<meta property="og:image" content="{og_image}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="{og_image}">
+<link rel="canonical" href="{site_url}">
 <link rel="stylesheet" href="{root}assets/site.css">
 </head>
 <body>
@@ -141,7 +159,11 @@ def build() -> None:
     if OUT_DIR.exists():
         shutil.rmtree(OUT_DIR)
     OUT_DIR.mkdir(parents=True)
-    shutil.copytree(ASSETS, OUT_DIR / "assets")
+    # og-card.html is the SOURCE for og.png, not a page. Publishing it would put a
+    # thin, titleless page on the site for crawlers to find.
+    shutil.copytree(
+        ASSETS, OUT_DIR / "assets", ignore=shutil.ignore_patterns("og-card.html")
+    )
 
     for page in PAGES:
         src = CONTENT / page.source
@@ -155,6 +177,8 @@ def build() -> None:
             description=page.description,
             site_title=SITE_TITLE,
             site_tagline=SITE_TAGLINE,
+            site_url=SITE_URL,
+            og_image=OG_IMAGE,
             toc=toc,
             body=body,
             root="../" * depth,

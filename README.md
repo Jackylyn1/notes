@@ -61,6 +61,15 @@ grep -oE 'id="[^"]+"' docs/index.html | sort | uniq -d      # must be empty
 grep -oE 'id="[^"]*_[0-9]+"' docs/index.html                # must be empty
 ```
 
+## The gate
+
+```bash
+./check.sh     # rebuilds, then verifies; non-zero exit means do not publish
+```
+
+Sixteen checks, including both anchor invariants below and the anonymisation
+guard. It is a gate, not a report to read: drive it to zero findings.
+
 ## Before every publish
 
 The notes are written to carry no employer, client or internal-system names.

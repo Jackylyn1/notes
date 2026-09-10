@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>og card</title>
+<style>
+  /* Source for docs/assets/og.png — the LinkedIn / social preview card.
+   * Render once with:
+   *   chromium --headless --disable-gpu --hide-scrollbars \
+   *     --window-size=1200,630 --screenshot=docs/assets/og.png assets/og-card.html
+   * Tokens match assets/site.css. Blue draws structure, cyan carries meaning.
+   */
+  :root {
+    --bg: #000c18;
+    --surface: #001221;
+    --line: #0c2338;
+    --border: #14395e;
+    --ink: #f8fafc;
+    --ink-2: #9fb3c8;
+    --ink-3: #6b8199;
+    --accent: #0868d0;
+    --cyan: #78c8f8;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1200px; height: 630px; }
+  body {
+    background:
+      radial-gradient(900px 420px at 88% -18%, rgb(8 104 208 / 22%), transparent 70%),
+      radial-gradient(700px 380px at -8% 112%, rgb(120 200 248 / 12%), transparent 70%),
+      var(--bg);
+    color: var(--ink-2);
+    font-family: var(--sans);
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 64px 72px;
+    position: relative;
+    overflow: hidden;
+  }
+  /* faint 64px grid, masked at the edges — background structure only */
+  body::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, var(--line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+    background-size: 64px 64px;
+    opacity: 0.5;
+    mask-image: radial-gradient(120% 100% at 50% 40%, #000 35%, transparent 78%);
+    -webkit-mask-image: radial-gradient(120% 100% at 50% 40%, #000 35%, transparent 78%);
+  }
+  .top, .mid, .bot { position: relative; }
+  .eyebrow {
+    font: 500 17px/1 var(--mono);
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+  .eyebrow::after {
+    content: "";
+    height: 2px;
+    width: 120px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+  }
+  h1 {
+    color: var(--ink);
+    font-size: 74px;
+    line-height: 1.04;
+    letter-spacing: -0.025em;
+    font-weight: 700;
+    max-width: 22ch;
+  }
+  .lede {
+    margin-top: 22px;
+    font-size: 25px;
+    line-height: 1.4;
+    color: var(--ink-2);
+    max-width: 46ch;
+  }
+  .stats { display: flex; gap: 56px; align-items: flex-end; }
+  .stat .v {
+    font: 500 44px/1 var(--mono);
+    color: var(--cyan);
+  }
+  .stat .l {
+    margin-top: 10px;
+    font: 500 13px/1.3 var(--mono);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    max-width: 20ch;
+  }
+</style>
+</head>
+<body>
+  <div class="top">
+    <div class="eyebrow">Engineering notes</div>
+  </div>
+
+  <div class="mid">
+    <h1>What an agent run actually costs</h1>
+    <p class="lede">Measured findings from building with LLMs, agents and retrieval — including the numbers that turned out wrong.</p>
+  </div>
+
+  <div class="bot stats">
+    <div class="stat">
+      <div class="v">21.95&times;</div>
+      <div class="l">context replay factor</div>
+    </div>
+    <div class="stat">
+      <div class="v">1.1%</div>
+      <div class="l">of the bill was output</div>
+    </div>
+    <div class="stat">
+      <div class="v">84%</div>
+      <div class="l">of runtime was approvals</div>
+    </div>
+  </div>
+</body>
+</html>
