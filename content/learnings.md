@@ -2471,10 +2471,15 @@ the codebase, sets how much hygiene a repository deserves.**
 
 ### 17.1 130M evaluations in ~235 seconds — and two artefacts that disagree about it
 
-The harness scanned **203 input series × 17 candidate rule types × ~28,800 parameter
-combinations**, over 50,000 rows per series (~10.15M rows total). Its own `learnings.md`
-records the full run at **~235 seconds on 10 of 12 cores — about 23,500 evaluations per
-second.**
+The harness scanned **203 input series × 17 candidate rule types**, at roughly 28,800
+parameter combinations per rule, over 50,000 rows per series (~10.15M rows total). Its
+own notes record the full run at **~235 seconds on 10 of 12 cores — about 23,500
+evaluations per second** and the total at **130M+ evaluations**.
+
+Those figures do not reconcile: 203 × 17 × 28,800 is 99.4M, not 130M. The grid is pruned
+per rule and the validation stage re-runs the kernel many times over, so neither number
+is obviously the wrong one — but the product is not the total, and quoting them as though
+one derives from the other would be inventing a relationship the source does not state.
 
 A separately recorded note puts the same full run at **about 5 hours**. Both figures are
 written down; they differ by ~75×. I cannot resolve which run each describes, so both are
@@ -2884,8 +2889,8 @@ The obvious move when replacing a legacy entry point is to delete it. That break
 site, because **the old URLs are inside the content**: years of user-written posts link
 to the old file with its old query string. What shipped instead was the old path kept as
 a shim that parses the legacy query parameters, maps them onto the new route and issues a
-`301`. Two files went from **2,665 and 2,101 lines to about 26 each** — a 4,717-line
-deletion in one commit, with no dead links.
+`301`. Two files went from **2,665 and 2,101 lines to 27 and 30** — a 4,717-line deletion
+in one commit, with no dead links.
 
 > **The lesson generalises past URLs: a migration is not finished when the code moves.
 > It is finished when everything that *points at* the old shape still resolves** — and

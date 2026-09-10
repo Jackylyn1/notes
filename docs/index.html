@@ -2527,10 +2527,14 @@ third-party execution platform. The general rule: <strong>the cost of a leak, no
 the codebase, sets how much hygiene a repository deserves.</strong></p>
 <h2 id="performance-engineering-making-a-search-space-affordable">17 — Performance engineering: making a search space affordable<a class="headerlink" href="#performance-engineering-making-a-search-space-affordable" title="Link to this section">#</a></h2>
 <h3 id="130m-evaluations-in-235-seconds-and-two-artefacts-that-disagree-about-it">17.1 130M evaluations in ~235 seconds — and two artefacts that disagree about it<a class="headerlink" href="#130m-evaluations-in-235-seconds-and-two-artefacts-that-disagree-about-it" title="Link to this section">#</a></h3>
-<p>The harness scanned <strong>203 input series × 17 candidate rule types × ~28,800 parameter
-combinations</strong>, over 50,000 rows per series (~10.15M rows total). Its own <code>learnings.md</code>
-records the full run at <strong>~235 seconds on 10 of 12 cores — about 23,500 evaluations per
-second.</strong></p>
+<p>The harness scanned <strong>203 input series × 17 candidate rule types</strong>, at roughly 28,800
+parameter combinations per rule, over 50,000 rows per series (~10.15M rows total). Its
+own notes record the full run at <strong>~235 seconds on 10 of 12 cores — about 23,500
+evaluations per second</strong> and the total at <strong>130M+ evaluations</strong>.</p>
+<p>Those figures do not reconcile: 203 × 17 × 28,800 is 99.4M, not 130M. The grid is pruned
+per rule and the validation stage re-runs the kernel many times over, so neither number
+is obviously the wrong one — but the product is not the total, and quoting them as though
+one derives from the other would be inventing a relationship the source does not state.</p>
 <p>A separately recorded note puts the same full run at <strong>about 5 hours</strong>. Both figures are
 written down; they differ by ~75×. I cannot resolve which run each describes, so both are
 kept here and neither should be quoted alone.</p>
@@ -2875,8 +2879,8 @@ mid-migration from a historically-grown structure onto a modern framework and OR
 site, because <strong>the old URLs are inside the content</strong>: years of user-written posts link
 to the old file with its old query string. What shipped instead was the old path kept as
 a shim that parses the legacy query parameters, maps them onto the new route and issues a
-<code>301</code>. Two files went from <strong>2,665 and 2,101 lines to about 26 each</strong> — a 4,717-line
-deletion in one commit, with no dead links.</p>
+<code>301</code>. Two files went from <strong>2,665 and 2,101 lines to 27 and 30</strong> — a 4,717-line deletion
+in one commit, with no dead links.</p>
 <blockquote>
 <p><strong>The lesson generalises past URLs: a migration is not finished when the code moves.
 It is finished when everything that <em>points at</em> the old shape still resolves</strong> — and
