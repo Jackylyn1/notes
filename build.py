@@ -33,7 +33,7 @@ SITE_TITLE = "Engineering notes"
 SITE_TAGLINE = "Measured findings from building with LLMs, agents and retrieval."
 # Absolute, because Open Graph consumers do not resolve relative URLs. Update
 # both if a custom domain is added.
-SITE_URL = "https://jackylyn1.github.io/notes/"
+SITE_URL = "https://jackylyn1.github.io/"
 OG_IMAGE = SITE_URL + "assets/og.png"
 
 

@@ -3,7 +3,7 @@
 Measured findings from building with LLMs, agents and retrieval — published so a
 finding can be linked to instead of retyped.
 
-**Live:** https://jackylyn1.github.io/notes/ *(after enabling Pages, see below)*
+**Live:** https://jackylyn1.github.io/ *(after enabling Pages, see below)*
 
 This repository exists for one reason: **every finding needs a stable, public,
 deep-linkable address.** A post that summarises a finding spends it; a post that
